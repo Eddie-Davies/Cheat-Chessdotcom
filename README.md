@@ -91,8 +91,14 @@ label OCR and full piece recognition remain separate later capabilities.
 
 Phase 8 occupancy detection classifies each mapped square as `occupied`,
 `empty`, or `uncertain` using local background estimation, foreground color
-distance, connected silhouette area, and edge density. It does not identify
-piece types. A diagnostic image can be generated with:
+distance, connected silhouette area, and edge density.
+
+Phase 9 adds the replaceable `PieceDetector` interface and a deterministic
+`TemplatePieceDetector`. It recognizes the observed Chess.com piece set
+using normalized silhouette templates and confidence scores. The current
+templates are representative only and are not universal across chess sites.
+
+Generate a piece-recognition diagnostic image with:
 
 ```bash
 python -m chess_analyser.detection.piece_detector \
@@ -100,6 +106,8 @@ python -m chess_analyser.detection.piece_detector \
    assets/test_screens/occupancy_phase8_chesscom.png \
    --x 247 --y 152 --width 928 --height 928
 ```
+
+Templates are stored under [assets/piece_templates](assets/piece_templates).
 
 ## License
 
