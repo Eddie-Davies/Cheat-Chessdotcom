@@ -109,6 +109,12 @@ python -m chess_analyser.detection.piece_detector \
 
 Templates are stored under [assets/piece_templates](assets/piece_templates).
 
+Phase 10 `PositionReconstructor` consumes the orientation-corrected piece
+map and existing occupancy results, requires exactly one white king and one
+black king, validates the resulting `ChessPosition`, and returns a FEN plus
+confidence. Invalid or low-confidence detections raise an explicit error;
+they are never silently passed to the engine.
+
 ## License
 
 MIT License
