@@ -115,6 +115,11 @@ black king, validates the resulting `ChessPosition`, and returns a FEN plus
 confidence. Invalid or low-confidence detections raise an explicit error;
 they are never silently passed to the engine.
 
+Phase 11 `SideToMoveDetector` combines active-player indicators, board
+highlights, active clocks, UI indicators, and confirmed history. It returns
+`white`, `black`, or `unknown` with confidence. `PositionReconstructor`
+rejects an unknown side rather than assuming White to move.
+
 ## License
 
 MIT License

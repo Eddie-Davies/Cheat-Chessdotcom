@@ -6,6 +6,7 @@ if TYPE_CHECKING:
 	from .board_detector import BoardDetection, BoardDetector
 	from .orientation import OrientationDetection, OrientationDetector
 	from .piece_detector import OccupancyDetection, OccupancyDetector, PieceDetection, PieceDetector, TemplatePieceDetector
+	from .side_to_move import SideToMoveDetection, SideToMoveDetector
 	from .square_detector import SquareDetector, SquareDetection
 
 __all__ = [
@@ -18,6 +19,8 @@ __all__ = [
 	"PieceDetection",
 	"PieceDetector",
 	"TemplatePieceDetector",
+	"SideToMoveDetection",
+	"SideToMoveDetector",
 	"SquareDetector",
 	"SquareDetection",
 ]
@@ -28,6 +31,7 @@ def __getattr__(name: str):
 		from .board_detector import BoardDetection, BoardDetector
 		from .orientation import OrientationDetection, OrientationDetector
 		from .piece_detector import OccupancyDetection, OccupancyDetector, PieceDetection, PieceDetector, TemplatePieceDetector
+		from .side_to_move import SideToMoveDetection, SideToMoveDetector
 		from .square_detector import SquareDetector, SquareDetection
 
 		return {
@@ -40,6 +44,8 @@ def __getattr__(name: str):
 			"PieceDetection": PieceDetection,
 			"PieceDetector": PieceDetector,
 			"TemplatePieceDetector": TemplatePieceDetector,
+			"SideToMoveDetection": SideToMoveDetection,
+			"SideToMoveDetector": SideToMoveDetector,
 			"SquareDetector": SquareDetector,
 			"SquareDetection": SquareDetection,
 		}[name]

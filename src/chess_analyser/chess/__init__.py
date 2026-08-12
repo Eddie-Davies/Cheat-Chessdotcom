@@ -7,6 +7,7 @@ from .reconstruction import (
 	PositionDetection,
 	PositionReconstructionError,
 	PositionReconstructor,
+	UnknownSideToMoveError,
 )
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
 	"PositionDetection",
 	"PositionReconstructionError",
 	"PositionReconstructor",
+	"UnknownSideToMoveError",
 	"board_from_fen",
 	"board_to_fen",
 	"is_valid_fen",

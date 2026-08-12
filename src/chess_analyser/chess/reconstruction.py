@@ -20,6 +20,10 @@ class LowConfidencePositionError(PositionReconstructionError):
 	"""Raised when a position is not reliable enough for downstream analysis."""
 
 
+class UnknownSideToMoveError(PositionReconstructionError):
+	"""Raised when side-to-move evidence is insufficient."""
+
+
 @dataclass(frozen=True)
 class PositionDetection:
 	"""Validated reconstructed position and its visual confidence."""
@@ -60,13 +64,15 @@ class PositionReconstructor:
 		piece_detections: Mapping[str, PieceDetection | str],
 		*,
 		occupancy: Mapping[str, OccupancyDetection] | None = None,
-		side_to_move: str = "white",
+		side_to_move: str | None = None,
 		castling_rights: str = "-",
 		en_passant: str | None = None,
 		halfmove_clock: int = 0,
 		fullmove_number: int = 1,
 	) -> PositionDetection:
 		"""Build and validate a position from algebraic, orientation-corrected detections."""
+		if side_to_move is None:
+			raise UnknownSideToMoveError("Side to move is unknown; position is not analysis-ready")
 		if side_to_move not in {"white", "black"}:
 			raise PositionReconstructionError("side_to_move must be 'white' or 'black'")
 		if not piece_detections:

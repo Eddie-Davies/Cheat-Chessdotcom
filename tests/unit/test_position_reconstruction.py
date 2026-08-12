@@ -75,6 +75,7 @@ def test_orientation_corrected_square_mapping_can_reconstruct_flipped_board():
 			"h1": "white_king",
 			"a8": "black_king",
 		},
+		side_to_move="white",
 	)
 
 	assert result.fen.startswith("k7/8/8/8/8/8/8/7K w - -")
@@ -82,13 +83,15 @@ def test_orientation_corrected_square_mapping_can_reconstruct_flipped_board():
 
 def test_missing_kings_are_rejected():
 	with pytest.raises(PositionReconstructionError, match="white king"):
-		PositionReconstructor().reconstruct({"e8": "black_king", "e2": "white_pawn"})
+		PositionReconstructor().reconstruct(
+			{"e8": "black_king", "e2": "white_pawn"}, side_to_move="white"
+		)
 
 
 def test_invalid_piece_and_low_confidence_are_rejected():
 	with pytest.raises(PositionReconstructionError, match="Unknown piece"):
 		PositionReconstructor().reconstruct(
-			{"e1": "white_king", "e8": "black_king", "e2": "dragon"}
+			{"e1": "white_king", "e8": "black_king", "e2": "dragon"}, side_to_move="white"
 		)
 	with pytest.raises(LowConfidencePositionError, match="Low-confidence piece"):
 		PositionReconstructor(confidence_threshold=0.8).reconstruct(
@@ -96,7 +99,8 @@ def test_invalid_piece_and_low_confidence_are_rejected():
 				"e1": PieceDetection("e1", "white_king", 0.9),
 				"e8": PieceDetection("e8", "black_king", 0.9),
 				"e2": PieceDetection("e2", "white_pawn", 0.4),
-			}
+			},
+			side_to_move="white",
 		)
 
 
@@ -104,10 +108,12 @@ def test_invalid_position_and_occupancy_mismatch_are_rejected():
 	with pytest.raises(PositionReconstructionError, match="Invalid chess position"):
 		PositionReconstructor().reconstruct(
 			{"e1": "white_king", "e8": "black_king", "a1": "white_pawn"},
+			side_to_move="white",
 			castling_rights="K",
 		)
 	with pytest.raises(PositionReconstructionError, match="not marked occupied"):
 		PositionReconstructor().reconstruct(
 			{"e1": "white_king", "e8": "black_king"},
+			side_to_move="white",
 			occupancy={"e1": type("Occupancy", (), {"status": "empty", "confidence": 1.0})()},
 		)
