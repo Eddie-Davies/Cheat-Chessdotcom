@@ -66,6 +66,14 @@ python -m chess_analyser.capture.screen_capture
 
 Use `--output path/to/capture.png` to choose another output path.
 
+Annotate a screenshot with the detected board boundary and grid:
+
+```bash
+python -m chess_analyser.detection.board_detector \
+   assets/test_screens/capture_phase4.png \
+   assets/test_screens/detected_phase5.png
+```
+
 ## License
 
 MIT License
