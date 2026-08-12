@@ -53,10 +53,18 @@ pytest --cov=src/chess_analyser
 
 ## Project Status
 
-Phase 3 complete: the diagnostic Tkinter interface can accept a FEN and
-run asynchronous engine analysis without blocking the GUI. Automatic
-screen capture, board detection, piece recognition, and overlays remain
-future phases.
+Phase 4 complete: the diagnostic Tkinter interface can accept a FEN and
+run asynchronous engine analysis without blocking the GUI, and the
+cross-platform MSS capture API can save diagnostic screenshots. Automatic
+board detection, piece recognition, and overlays remain future phases.
+
+Save a diagnostic screenshot with:
+
+```bash
+python -m chess_analyser.capture.screen_capture
+```
+
+Use `--output path/to/capture.png` to choose another output path.
 
 ## License
 
