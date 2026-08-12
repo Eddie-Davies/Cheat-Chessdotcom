@@ -1,5 +1,19 @@
-"""
-Stockfish engine module.
+"""Stockfish engine public API."""
 
-Handles engine communication and analysis.
-"""
+from .stockfish_engine import (
+	EngineAnalysis,
+	EngineError,
+	EngineLine,
+	InvalidFENError,
+	StockfishEngine,
+	StockfishUnavailableError,
+)
+
+__all__ = [
+	"EngineAnalysis",
+	"EngineError",
+	"EngineLine",
+	"InvalidFENError",
+	"StockfishEngine",
+	"StockfishUnavailableError",
+]

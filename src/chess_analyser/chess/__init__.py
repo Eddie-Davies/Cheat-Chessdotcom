@@ -1,5 +1,13 @@
-"""
-Chess position management module.
+"""Chess position management public API."""
 
-Handles position representation and validation using python-chess.
-"""
+from .fen import board_from_fen, board_to_fen, is_valid_fen
+from .position import ChessPosition, PositionKey, PositionValidationError
+
+__all__ = [
+	"ChessPosition",
+	"PositionKey",
+	"PositionValidationError",
+	"board_from_fen",
+	"board_to_fen",
+	"is_valid_fen",
+]
