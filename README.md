@@ -89,6 +89,18 @@ recognized corner-piece hints, and previous orientation history. It returns
 `white_bottom`, `black_bottom`, or `unknown` with a confidence score. Raw
 label OCR and full piece recognition remain separate later capabilities.
 
+Phase 8 occupancy detection classifies each mapped square as `occupied`,
+`empty`, or `uncertain` using local background estimation, foreground color
+distance, connected silhouette area, and edge density. It does not identify
+piece types. A diagnostic image can be generated with:
+
+```bash
+python -m chess_analyser.detection.piece_detector \
+   assets/test_screens/chess_com_board_01.png \
+   assets/test_screens/occupancy_phase8_chesscom.png \
+   --x 247 --y 152 --width 928 --height 928
+```
+
 ## License
 
 MIT License
