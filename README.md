@@ -53,7 +53,10 @@ pytest --cov=src/chess_analyser
 
 ## Project Status
 
-Currently in Phase 0: Repository Setup
+Phase 3 complete: the diagnostic Tkinter interface can accept a FEN and
+run asynchronous engine analysis without blocking the GUI. Automatic
+screen capture, board detection, piece recognition, and overlays remain
+future phases.
 
 ## License
 

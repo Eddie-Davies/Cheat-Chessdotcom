@@ -8,11 +8,12 @@ from pathlib import Path
 
 from chess_analyser.config import DEFAULT_SETTINGS
 from chess_analyser.logging import setup_logging
+from chess_analyser.ui import MainWindow
 
 logger: logging.Logger
 
 
-def main() -> None:
+def main(*, run_gui: bool = True) -> None:
     """
     Main application entry point.
 
@@ -30,17 +31,13 @@ def main() -> None:
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Platform: {sys.platform}")
 
-    # TODO: Phase 1 - Initialize Stockfish engine
-    # TODO: Phase 3 - Initialize UI
-    # TODO: Phase 4 - Initialize screen capture
-    # TODO: Phase 5+ - Initialize detection pipeline
-
     logger.info("Chess Analyser initialized successfully")
-    logger.info("Application is ready (Phase 0: repository setup complete)")
+    if not run_gui:
+        print("Chess Analyser initialized successfully")
+        return
 
-    # For now, just show that we've initialized
-    print("✓ Chess Analyser initialized successfully")
-    print("✓ Phase 0 (Repository Setup) complete")
+    logger.info("Starting Phase 3 Tkinter interface")
+    MainWindow().run()
 
 
 if __name__ == "__main__":

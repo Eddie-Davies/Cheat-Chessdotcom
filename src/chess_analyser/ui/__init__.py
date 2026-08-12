@@ -1,5 +1,6 @@
-"""
-UI module for Chess Analyser.
+"""Tkinter UI public API."""
 
-Handles the main application window and status display.
-"""
+from .main_window import MainWindow
+from .status import format_evaluation, format_line
+
+__all__ = ["MainWindow", "format_evaluation", "format_line"]
