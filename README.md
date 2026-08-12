@@ -74,6 +74,16 @@ python -m chess_analyser.detection.board_detector \
    assets/test_screens/detected_phase5.png
 ```
 
+Label the mapped chess squares after detection:
+
+```bash
+python -m chess_analyser.detection.square_detector \
+   assets/test_screens/chess_com_board_01.png \
+   assets/test_screens/squares_phase6_chesscom.png \
+   --x 247 --y 152 --width 928 --height 928 \
+   --orientation white_bottom
+```
+
 ## License
 
 MIT License
