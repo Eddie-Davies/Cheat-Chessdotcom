@@ -84,6 +84,11 @@ python -m chess_analyser.detection.square_detector \
    --orientation white_bottom
 ```
 
+Phase 7 orientation detection combines optional board-label observations,
+recognized corner-piece hints, and previous orientation history. It returns
+`white_bottom`, `black_bottom`, or `unknown` with a confidence score. Raw
+label OCR and full piece recognition remain separate later capabilities.
+
 ## License
 
 MIT License
