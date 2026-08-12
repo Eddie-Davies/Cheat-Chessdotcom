@@ -18,6 +18,7 @@ class AppSettings:
     capture_interval_ms: int = 100
     board_detection_interval_ms: int = 500
     position_stability_frames: int = 3
+    position_debounce_ms: int = 0
     piece_confidence_threshold: float = 0.7
     board_confidence_threshold: float = 0.7
 
@@ -36,6 +37,10 @@ class AppSettings:
 
     def __post_init__(self) -> None:
         """Validate settings after initialization."""
+        if self.position_stability_frames < 1:
+            raise ValueError("position_stability_frames must be at least 1")
+        if self.position_debounce_ms < 0:
+            raise ValueError("position_debounce_ms must not be negative")
         if not 0 <= self.piece_confidence_threshold <= 1.0:
             raise ValueError("piece_confidence_threshold must be between 0 and 1")
         if not 0 <= self.board_confidence_threshold <= 1.0:

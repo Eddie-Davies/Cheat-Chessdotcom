@@ -120,6 +120,12 @@ highlights, active clocks, UI indicators, and confirmed history. It returns
 `white`, `black`, or `unknown` with confidence. `PositionReconstructor`
 rejects an unknown side rather than assuming White to move.
 
+Phase 12 `PositionTracker` confirms a reconstructed position only after the
+configured number of consecutive matching hashes and optional debounce
+delay. A changed hash enters transition state, and each stable hash emits at
+most one analysis request until the tracker is reset. Transient animation
+frames therefore do not trigger analysis.
+
 ## License
 
 MIT License
