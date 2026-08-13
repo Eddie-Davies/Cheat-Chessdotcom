@@ -1,5 +1,5 @@
-"""
-Overlay rendering module.
+"""Overlay public API."""
 
-Handles transparent overlay display on top of the chess board.
-"""
+from .overlay_window import Overlay, OverlayGeometry, OverlayPlatform, TkinterOverlay
+
+__all__ = ["Overlay", "OverlayGeometry", "OverlayPlatform", "TkinterOverlay"]

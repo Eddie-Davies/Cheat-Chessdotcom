@@ -52,6 +52,7 @@ def test_uncertain_result_is_available_for_ambiguous_activity():
     assert 0 < result.confidence < 1
 
 
+@pytest.mark.standard_screen
 def test_real_chess_com_fixture_finds_many_occupied_and_empty_squares():
     fixture_path = Path("assets/test_screens/chesscom_standard_start/source.png")
     if not fixture_path.exists():

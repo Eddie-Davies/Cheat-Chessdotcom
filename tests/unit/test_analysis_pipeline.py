@@ -80,6 +80,7 @@ def make_pipeline(image, engine, tracker=None, callback=None):
 	)
 
 
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_fixture_flows_to_analysis_without_manual_fen_or_coordinates():
 	image = cv2.imread(str(FIXTURE))
@@ -97,6 +98,7 @@ def test_fixture_flows_to_analysis_without_manual_fen_or_coordinates():
 	assert len(engine.calls) == 1
 
 
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_stable_fixture_does_not_duplicate_engine_analysis():
 	image = cv2.imread(str(FIXTURE))

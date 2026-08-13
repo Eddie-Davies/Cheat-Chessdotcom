@@ -34,6 +34,7 @@ def starting_position_labels():
 	}
 
 
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_recognizes_all_twelve_piece_classes():
 	image, _board, squares, occupancy = fixture_data()
@@ -50,6 +51,7 @@ def test_recognizes_all_twelve_piece_classes():
 	assert all(0 <= result.confidence <= 1 for result in results.values())
 
 
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_template_matching_handles_scaled_board():
 	image, board, _squares, _occupancy = fixture_data()
@@ -71,6 +73,7 @@ def test_template_matching_handles_scaled_board():
 	assert sum(result.piece == expected[name] for name, result in results.items()) >= 29
 
 
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_empty_squares_are_not_classified_when_occupancy_is_supplied():
 	image, _board, squares, occupancy = fixture_data()
@@ -79,6 +82,7 @@ def test_empty_squares_are_not_classified_when_occupancy_is_supplied():
 	assert "d4" not in results
 
 
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_piece_diagnostic_rendering(tmp_path: Path):
 	image, _board, squares, occupancy = fixture_data()

@@ -67,6 +67,12 @@ Wood and brown boards remain explicitly deferred for later improvement:
 piece recognition needs additional templates, and board-boundary detection
 is currently slightly offset or partial on some of those fixtures.
 
+Fast active-board regression command:
+
+```text
+venv\Scripts\python.exe -m pytest -m standard_screen
+```
+
 Save a diagnostic screenshot with:
 
 ```bash
@@ -142,6 +148,23 @@ as `SEARCHING`, `POSITION_UNCERTAIN`, `POSITION_STABLE`, `ANALYSING`,
 `ANALYSIS_READY`, and `ERROR`, runs continuous work on a background thread,
 and caches results by position hash. Overlay rendering is intentionally not
 part of this phase.
+
+Phase 14 adds the platform-neutral `Overlay` interface and a Tkinter
+diagnostic grid backend. The window is borderless, translucent, always on top,
+positioned from `BoardDetection`, hideable, and intentionally not
+click-through: it receives its own input and never sends input to the
+underlying chess application. The diagnostic command is:
+
+```bash
+python -m chess_analyser.overlay.overlay_window \
+   --x 247 --y 152 --width 928 --height 928
+```
+
+Tkinter window-manager capabilities vary by platform. macOS may require
+Screen Recording/accessibility permissions for screen-aligned workflows;
+Linux X11 is the most predictable target, while Wayland compositors may
+restrict global positioning and always-on-top behavior. Move rendering is
+not part of this phase.
 
 ## License
 

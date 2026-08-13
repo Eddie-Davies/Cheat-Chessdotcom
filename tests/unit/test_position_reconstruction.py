@@ -42,6 +42,7 @@ def test_known_piece_map_reconstructs_fen_and_confidence():
 	assert result.stable
 
 
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_uploaded_starting_position_reconstructs_correct_fen():
 	image = cv2.imread(str(FIXTURE))

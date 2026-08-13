@@ -25,3 +25,12 @@ need improvement before they should be used as success criteria.
 
 Synthetic light/dark images may continue to be used for isolated algorithm
 unit tests; real screenshot regression tests must use green-board fixtures.
+
+Fast active-board regression command:
+
+```text
+venv\Scripts\python.exe -m pytest -m standard_screen
+```
+
+This targets the standard green starting-board screenshot and avoids the
+broader full-suite run when only the active board needs checking.

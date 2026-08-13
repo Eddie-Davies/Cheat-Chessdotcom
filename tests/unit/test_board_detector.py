@@ -85,6 +85,7 @@ def test_real_desktop_capture_without_board_is_rejected():
     assert result is None
 
 
+@pytest.mark.standard_screen
 def test_real_chess_com_fixture_detects_board_scale_and_bounds():
     fixture_path = Path("assets/test_screens/chesscom_standard_start/source.png")
     if not fixture_path.exists():
