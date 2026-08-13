@@ -166,6 +166,18 @@ Linux X11 is the most predictable target, while Wayland compositors may
 restrict global positioning and always-on-top behavior. Move rendering is
 not part of this phase.
 
+Phase 15 adds UCI best-move arrows to the diagnostic overlay. Test `e2-e4`
+over the standard green board with:
+
+```bash
+python -m chess_analyser.overlay.overlay_window \
+   --x 247 --y 152 --width 928 --height 928 \
+   --move e2e4 --orientation white_bottom
+```
+
+The same renderer supports captures and promotions, for example `d5e6` and
+`a7a8q`. The arrow is visual only and never sends input to the chess app.
+
 ## License
 
 MIT License

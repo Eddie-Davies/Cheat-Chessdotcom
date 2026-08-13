@@ -16,6 +16,8 @@ import cv2
 from chess_analyser.detection.board_detector import BoardDetection
 from chess_analyser.detection.square_detector import SquareDetector
 
+from .arrows import ArrowRenderer
+
 
 @dataclass(frozen=True)
 class OverlayGeometry:
@@ -82,6 +84,8 @@ class TkinterOverlay(Overlay):
 		self.alpha = alpha
 		self.visible = False
 		self.geometry: OverlayGeometry | None = None
+		self.best_move: str | None = None
+		self.arrow_renderer = ArrowRenderer()
 		self.window.overrideredirect(True)
 		self.window.attributes("-topmost", True)
 		self.window.attributes("-alpha", alpha)
@@ -98,11 +102,14 @@ class TkinterOverlay(Overlay):
 		self.window.withdraw()
 		self.visible = False
 
-	def update(self, board: BoardDetection) -> None:
+	def update(self, board: BoardDetection, best_move: str | None = None) -> None:
 		self.geometry = OverlayGeometry.from_board(board)
+		self.best_move = best_move
 		geometry = self.geometry
 		self.window.geometry(f"{geometry.width}x{geometry.height}+{geometry.x}+{geometry.y}")
 		self._draw_grid()
+		if best_move:
+			self.arrow_renderer.draw_on_canvas(self.canvas, board, best_move)
 		if not self.visible:
 			self.show()
 
@@ -138,9 +145,13 @@ def main() -> None:
 	parser.add_argument("--y", type=int, required=True)
 	parser.add_argument("--width", type=int, required=True)
 	parser.add_argument("--height", type=int, required=True)
+	parser.add_argument("--move", default="e2e4", help="Diagnostic UCI move (default: e2e4)")
+	parser.add_argument("--orientation", choices=("white_bottom", "black_bottom"), default="white_bottom")
 	args = parser.parse_args()
-	board = BoardDetection(args.x, args.y, args.width, args.height, args.width / 8, 1.0)
-	TkinterOverlay().run_diagnostic(board)
+	board = BoardDetection(args.x, args.y, args.width, args.height, args.width / 8, 1.0, args.orientation)
+	overlay = TkinterOverlay()
+	overlay.update(board, args.move)
+	overlay.root.mainloop()
 
 
 if __name__ == "__main__":
