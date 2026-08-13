@@ -46,7 +46,7 @@ class Overlay(ABC):
 		"""Hide the overlay."""
 
 	@abstractmethod
-	def update(self, board: BoardDetection) -> None:
+	def update(self, board: BoardDetection, best_move: str | None = None, analysis: Any | None = None) -> None:
 		"""Move and redraw the overlay for detected board geometry."""
 
 	@abstractmethod
