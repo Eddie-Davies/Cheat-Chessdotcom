@@ -18,6 +18,7 @@ from chess_analyser.detection.square_detector import SquareDetector
 
 from .arrows import ArrowRenderer
 from .evaluation_panel import EvaluationPanel, EvaluationPanelConfig
+from .hotkeys import GlobalHotkeyService, HotkeyStatus, OverlayVisibilityController
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ class TkinterOverlay(Overlay):
 		*,
 		alpha: float = 0.82,
 		panel_config: EvaluationPanelConfig | None = None,
+		hotkey_service: GlobalHotkeyService | None = None,
 	) -> None:
 		if not 0 < alpha <= 1:
 			raise ValueError("alpha must be greater than 0 and at most 1")
@@ -94,6 +96,11 @@ class TkinterOverlay(Overlay):
 		self.best_move: str | None = None
 		self.arrow_renderer = ArrowRenderer()
 		self.evaluation_panel = EvaluationPanel(panel_config)
+		self.hotkey_service = hotkey_service
+		self.visibility_controller = OverlayVisibilityController(
+			self,
+			dispatch=lambda callback: self.root.after(0, callback),
+		)
 		self.window.overrideredirect(True)
 		self.window.attributes("-topmost", True)
 		self.window.attributes("-alpha", alpha)
@@ -109,6 +116,15 @@ class TkinterOverlay(Overlay):
 	def hide(self) -> None:
 		self.window.withdraw()
 		self.visible = False
+
+	def start_hotkey(self, service: GlobalHotkeyService | None = None) -> HotkeyStatus:
+		"""Register the configured global toggle key and return its status."""
+		self.hotkey_service = service or self.hotkey_service or GlobalHotkeyService()
+		return self.hotkey_service.start(self.visibility_controller.toggle)
+
+	def stop_hotkey(self) -> None:
+		if self.hotkey_service:
+			self.hotkey_service.stop()
 
 	def update(self, board: BoardDetection, best_move: str | None = None, analysis=None) -> None:
 		self.geometry = OverlayGeometry.from_board(board)
@@ -140,6 +156,7 @@ class TkinterOverlay(Overlay):
 		self.root.mainloop()
 
 	def close(self) -> None:
+		self.stop_hotkey()
 		if self.visible:
 			self.hide()
 		if self._owns_root:
@@ -160,6 +177,8 @@ def main() -> None:
 	args = parser.parse_args()
 	board = BoardDetection(args.x, args.y, args.width, args.height, args.width / 8, 1.0, args.orientation)
 	overlay = TkinterOverlay()
+	status = overlay.start_hotkey()
+	print(status.message)
 	overlay.update(board, args.move)
 	overlay.root.mainloop()
 

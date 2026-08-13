@@ -169,6 +169,15 @@ not part of this phase.
 Phase 15 adds UCI best-move arrows to the diagnostic overlay. Test `e2-e4`
 over the standard green board with:
 
+Phase 18 adds the configurable global visibility hotkey. The default is
+`F8`; start the diagnostic overlay normally and press `F8` to hide it, then
+press `F8` again to show it. The implementation uses an isolated optional
+pynput backend and dispatches visibility changes onto Tkinter's UI thread.
+Registration failures and OS permission failures are reported without
+crashing the overlay. On macOS, grant Accessibility/Input Monitoring access
+when requested. On Linux, X11 is the most predictable environment; Wayland
+compositors may restrict global keyboard hooks. The hotkey only changes this
+overlay's visibility and never sends input to the underlying chess app.
 ```bash
 python -m chess_analyser.overlay.overlay_window \
    --x 247 --y 152 --width 928 --height 928 \
