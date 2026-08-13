@@ -17,6 +17,7 @@ from chess_analyser.detection.board_detector import BoardDetection
 from chess_analyser.detection.square_detector import SquareDetector
 
 from .arrows import ArrowRenderer
+from .evaluation_panel import EvaluationPanel, EvaluationPanelConfig
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,13 @@ class OverlayPlatform:
 class TkinterOverlay(Overlay):
 	"""Borderless, translucent, always-on-top grid overlay using Tk APIs."""
 
-	def __init__(self, root: tk.Misc | None = None, *, alpha: float = 0.82) -> None:
+	def __init__(
+		self,
+		root: tk.Misc | None = None,
+		*,
+		alpha: float = 0.82,
+		panel_config: EvaluationPanelConfig | None = None,
+	) -> None:
 		if not 0 < alpha <= 1:
 			raise ValueError("alpha must be greater than 0 and at most 1")
 		self._owns_root = root is None
@@ -86,6 +93,7 @@ class TkinterOverlay(Overlay):
 		self.geometry: OverlayGeometry | None = None
 		self.best_move: str | None = None
 		self.arrow_renderer = ArrowRenderer()
+		self.evaluation_panel = EvaluationPanel(panel_config)
 		self.window.overrideredirect(True)
 		self.window.attributes("-topmost", True)
 		self.window.attributes("-alpha", alpha)
@@ -102,7 +110,7 @@ class TkinterOverlay(Overlay):
 		self.window.withdraw()
 		self.visible = False
 
-	def update(self, board: BoardDetection, best_move: str | None = None) -> None:
+	def update(self, board: BoardDetection, best_move: str | None = None, analysis=None) -> None:
 		self.geometry = OverlayGeometry.from_board(board)
 		self.best_move = best_move
 		geometry = self.geometry
@@ -110,6 +118,8 @@ class TkinterOverlay(Overlay):
 		self._draw_grid()
 		if best_move:
 			self.arrow_renderer.draw_on_canvas(self.canvas, board, best_move)
+		if analysis is not None:
+			self.evaluation_panel.draw(self.canvas, geometry.width, geometry.height, analysis)
 		if not self.visible:
 			self.show()
 

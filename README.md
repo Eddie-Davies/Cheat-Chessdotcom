@@ -178,6 +178,12 @@ python -m chess_analyser.overlay.overlay_window \
 The same renderer supports captures and promotions, for example `d5e6` and
 `a7a8q`. The arrow is visual only and never sends input to the chess app.
 
+Phase 16 adds a compact evaluation panel using the existing
+`EngineAnalysis` result. It displays the best move, evaluation, depth, and
+optional MultiPV alternatives. The default position is `outside_right`, so
+the panel does not cover the board; supported alternatives are
+`outside_left`, `inside_top`, and `inside_bottom`.
+
 ## License
 
 MIT License
