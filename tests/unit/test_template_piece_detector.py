@@ -13,7 +13,7 @@ from chess_analyser.detection import (
 )
 
 
-FIXTURE = Path("assets/test_screens/chess_com_board_01.png")
+FIXTURE = Path("assets/test_screens/chesscom_standard_start/source.png")
 TEMPLATES = Path("assets/piece_templates")
 
 
@@ -71,6 +71,7 @@ def test_template_matching_handles_scaled_board():
 	assert sum(result.piece == expected[name] for name, result in results.items()) >= 29
 
 
+@pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_empty_squares_are_not_classified_when_occupancy_is_supplied():
 	image, _board, squares, occupancy = fixture_data()
 	results = TemplatePieceDetector(TEMPLATES).detect(image, squares, occupancy)

@@ -59,6 +59,7 @@ class BoardDetector:
 		image = self._validate_image(screen_image)
 		working, scale = self._resize_for_search(image)
 		candidates = self._find_candidates(working)
+		candidates.extend(self._grid_candidates(working))
 		scored = [self._score_candidate(working, candidate) for candidate in candidates]
 		scored = [candidate for candidate in scored if candidate is not None]
 		if not scored:
@@ -225,6 +226,22 @@ class BoardDetector:
 			if side >= self.min_board_size and x + side <= width and y + side <= height:
 				candidates.add((x, y, side, side))
 		return list(candidates)
+
+	def _grid_candidates(self, image: np.ndarray) -> list[tuple[int, int, int, int]]:
+		"""Search square windows when board edges are weak or textured."""
+		height, width = image.shape[:2]
+		minimum_side = max(self.min_board_size * 2, min(height, width) // 5)
+		maximum_side = min(height, width)
+		if minimum_side > maximum_side:
+			return []
+		sides = np.unique(np.linspace(minimum_side, maximum_side, 16, dtype=int))
+		candidates: list[tuple[int, int, int, int]] = []
+		for side in sides:
+			step = max(12, side // 10)
+			for y in range(0, height - side + 1, step):
+				for x in range(0, width - side + 1, step):
+					candidates.append((x, y, int(side), int(side)))
+		return candidates
 
 	@staticmethod
 	def _square_refinements(

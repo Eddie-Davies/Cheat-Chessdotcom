@@ -53,10 +53,19 @@ pytest --cov=src/chess_analyser
 
 ## Project Status
 
-Phase 4 complete: the diagnostic Tkinter interface can accept a FEN and
-run asynchronous engine analysis without blocking the GUI, and the
-cross-platform MSS capture API can save diagnostic screenshots. Automatic
-board detection, piece recognition, and overlays remain future phases.
+Phase 13 is implemented. The near-term testing target is the green
+Chess.com board theme used during play.
+
+Green-board screenshot regression tests should use fixtures under:
+
+```text
+assets/test_screens/chesscom_standard_start/
+assets/test_screens/chesscom_green_active_game/
+```
+
+Wood and brown boards remain explicitly deferred for later improvement:
+piece recognition needs additional templates, and board-boundary detection
+is currently slightly offset or partial on some of those fixtures.
 
 Save a diagnostic screenshot with:
 
@@ -125,6 +134,14 @@ configured number of consecutive matching hashes and optional debounce
 delay. A changed hash enters transition state, and each stable hash emits at
 most one analysis request until the tracker is reset. Transient animation
 frames therefore do not trigger analysis.
+
+Phase 13 `AutomaticAnalysisPipeline` connects capture, board detection,
+square mapping, orientation, occupancy, piece recognition, reconstruction,
+side-to-move, stability, and engine analysis. It exposes explicit states such
+as `SEARCHING`, `POSITION_UNCERTAIN`, `POSITION_STABLE`, `ANALYSING`,
+`ANALYSIS_READY`, and `ERROR`, runs continuous work on a background thread,
+and caches results by position hash. Overlay rendering is intentionally not
+part of this phase.
 
 ## License
 

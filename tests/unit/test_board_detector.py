@@ -74,7 +74,7 @@ def test_detects_dark_board_theme_without_colour_assumption():
 
 
 def test_real_desktop_capture_without_board_is_rejected():
-    fixture_path = Path("assets/test_screens/capture_phase4.png")
+    fixture_path = Path("assets/test_screens/reference_non_board/desktop_no_board.png")
     if not fixture_path.exists():
         pytest.skip("Phase 4 desktop capture fixture is not available")
     image = cv2.imread(str(fixture_path))
@@ -86,7 +86,7 @@ def test_real_desktop_capture_without_board_is_rejected():
 
 
 def test_real_chess_com_fixture_detects_board_scale_and_bounds():
-    fixture_path = Path("assets/test_screens/chess_com_board_01.png")
+    fixture_path = Path("assets/test_screens/chesscom_standard_start/source.png")
     if not fixture_path.exists():
         pytest.skip("Uploaded Chess.com fixture is not available")
     image = cv2.imread(str(fixture_path))

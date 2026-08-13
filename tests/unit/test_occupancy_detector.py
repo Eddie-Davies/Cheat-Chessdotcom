@@ -53,7 +53,7 @@ def test_uncertain_result_is_available_for_ambiguous_activity():
 
 
 def test_real_chess_com_fixture_finds_many_occupied_and_empty_squares():
-    fixture_path = Path("assets/test_screens/chess_com_board_01.png")
+    fixture_path = Path("assets/test_screens/chesscom_standard_start/source.png")
     if not fixture_path.exists():
         pytest.skip("Uploaded Chess.com fixture is not available")
     image = cv2.imread(str(fixture_path))

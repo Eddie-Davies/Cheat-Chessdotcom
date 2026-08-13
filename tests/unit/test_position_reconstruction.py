@@ -19,7 +19,7 @@ from chess_analyser.detection import (
 )
 
 
-FIXTURE = Path("assets/test_screens/chess_com_board_01.png")
+FIXTURE = Path("assets/test_screens/chesscom_standard_start/source.png")
 TEMPLATES = Path("assets/piece_templates")
 STARTING_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
