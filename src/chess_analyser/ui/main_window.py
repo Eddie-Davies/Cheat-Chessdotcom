@@ -16,6 +16,7 @@ from chess_analyser.engine import (
 	StockfishUnavailableError,
 )
 from chess_analyser.config import AppSettings, DEFAULT_SETTINGS
+from chess_analyser.pipeline import AutomaticAnalysisPipeline, PipelineEvent
 
 from .status import format_evaluation, format_line
 
@@ -28,11 +29,16 @@ class MainWindow:
 		root: tk.Tk | None = None,
 		*,
 		engine: StockfishEngine | Any | None = None,
+		pipeline: AutomaticAnalysisPipeline | Any | None = None,
+		overlay: Any | None = None,
 		settings: AppSettings | None = None,
 	) -> None:
 		self.settings = settings or DEFAULT_SETTINGS
 		self.root = root or tk.Tk()
 		self.engine = engine or StockfishEngine(self.settings.stockfish_path or None)
+		self.pipeline = pipeline
+		self.overlay = overlay
+		self._running = False
 		self._results: queue.Queue[tuple[str, object]] = queue.Queue()
 		self._worker: threading.Thread | None = None
 		self._closed = False
@@ -49,7 +55,13 @@ class MainWindow:
 		self.time_var = tk.StringVar(value=f"{self.settings.engine_time_ms / 1000:.1f}")
 		self.multipv_var = tk.StringVar(value=str(self.settings.multipv))
 		self.fen_var = tk.StringVar(value=ChessPosition.starting().fen)
-		self.engine_status_var = tk.StringVar(value="Stockfish: ready to start")
+		self.board_status_var = tk.StringVar(value="Searching")
+		self.board_confidence_var = tk.StringVar(value="-")
+		self.position_status_var = tk.StringVar(value="Uncertain")
+		self.pieces_status_var = tk.StringVar(value="0/32 recognised")
+		self.engine_status_var = tk.StringVar(value="Stockfish")
+		self.overlay_status_var = tk.StringVar(value="Hidden")
+		self.hotkey_status_var = tk.StringVar(value=self.settings.overlay_hotkey.upper())
 		self.best_move_var = tk.StringVar(value="-")
 		self.evaluation_var = tk.StringVar(value="-")
 		self.depth_display_var = tk.StringVar(value="-")
@@ -65,9 +77,20 @@ class MainWindow:
 		ttk.Label(container, text="CHESS ANALYSER", font=("TkDefaultFont", 18, "bold")).grid(
 			row=0, column=0, columnspan=2, sticky="w", pady=(0, 14)
 		)
-		ttk.Label(container, textvariable=self.engine_status_var).grid(
-			row=1, column=0, columnspan=2, sticky="w", pady=(0, 12)
-		)
+		monitor_frame = ttk.LabelFrame(container, text="Monitoring", padding=10)
+		monitor_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+		monitor_frame.columnconfigure(1, weight=1)
+		for row, label, variable in (
+			(0, "Board", self.board_status_var),
+			(1, "Confidence", self.board_confidence_var),
+			(2, "Position", self.position_status_var),
+			(3, "Pieces", self.pieces_status_var),
+			(4, "Engine", self.engine_status_var),
+			(5, "Overlay", self.overlay_status_var),
+			(6, "Hotkey", self.hotkey_status_var),
+		):
+			ttk.Label(monitor_frame, text=f"{label}:").grid(row=row, column=0, sticky="w", pady=2)
+			ttk.Label(monitor_frame, textvariable=variable).grid(row=row, column=1, sticky="w", pady=2)
 
 		settings_frame = ttk.LabelFrame(container, text="Engine settings", padding=10)
 		settings_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 12))
@@ -76,19 +99,34 @@ class MainWindow:
 		self._add_entry(settings_frame, 1, "Time (seconds)", self.time_var)
 		self._add_entry(settings_frame, 2, "Lines (MultiPV)", self.multipv_var)
 
-		fen_frame = ttk.LabelFrame(container, text="Diagnostic position (FEN)", padding=10)
-		fen_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+		controls_frame = ttk.Frame(container)
+		controls_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+		self.start_button = ttk.Button(controls_frame, text="Start", command=self.start)
+		self.start_button.pack(side="left")
+		self.pause_button = ttk.Button(controls_frame, text="Pause", command=self.pause, state="disabled")
+		self.pause_button.pack(side="left", padx=(6, 0))
+		self.show_overlay_button = ttk.Button(controls_frame, text="Show Overlay", command=self.show_overlay)
+		self.show_overlay_button.pack(side="left", padx=(6, 0))
+		self.hide_overlay_button = ttk.Button(controls_frame, text="Hide Overlay", command=self.hide_overlay)
+		self.hide_overlay_button.pack(side="left", padx=(6, 0))
+		self.redetect_button = ttk.Button(controls_frame, text="Re-detect Board", command=self.redetect)
+		self.redetect_button.pack(side="left", padx=(6, 0))
+		self.settings_button = ttk.Button(controls_frame, text="Settings", command=self.open_settings)
+		self.settings_button.pack(side="right")
+
+		fen_frame = ttk.LabelFrame(container, text="Diagnostic position (optional)", padding=10)
+		fen_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0, 12))
 		fen_frame.columnconfigure(0, weight=1)
 		self.fen_entry = ttk.Entry(fen_frame, textvariable=self.fen_var)
 		self.fen_entry.grid(row=0, column=0, sticky="ew")
 		self.analyse_button = ttk.Button(fen_frame, text="Analyse", command=self._on_analyse)
 		self.analyse_button.grid(row=0, column=1, padx=(8, 0))
 
-		result_frame = ttk.LabelFrame(container, text="Analysis", padding=10)
-		result_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
+		result_frame = ttk.LabelFrame(container, text="Latest analysis", padding=10)
+		result_frame.grid(row=5, column=0, columnspan=2, sticky="nsew")
 		result_frame.columnconfigure(1, weight=1)
 		result_frame.rowconfigure(4, weight=1)
-		container.rowconfigure(4, weight=1)
+		container.rowconfigure(5, weight=1)
 		self._add_result_value(result_frame, 0, "Best move", self.best_move_var)
 		self._add_result_value(result_frame, 1, "Evaluation", self.evaluation_var)
 		self._add_result_value(result_frame, 2, "Search depth", self.depth_display_var)
@@ -97,7 +135,7 @@ class MainWindow:
 		self.alternatives.grid(row=4, column=0, columnspan=2, sticky="nsew")
 
 		ttk.Label(container, textvariable=self.status_var, relief="sunken", anchor="w").grid(
-			row=5, column=0, columnspan=2, sticky="ew", pady=(12, 0)
+			row=6, column=0, columnspan=2, sticky="ew", pady=(12, 0)
 		)
 
 	@staticmethod
@@ -111,6 +149,107 @@ class MainWindow:
 		ttk.Label(parent, textvariable=variable, font=("TkDefaultFont", 11, "bold")).grid(
 			row=row, column=1, sticky="w", pady=3
 		)
+
+	def _create_pipeline(self) -> AutomaticAnalysisPipeline:
+		from chess_analyser.capture import ScreenCapture
+
+		return AutomaticAnalysisPipeline(
+			capture=ScreenCapture(),
+			capture_interval_ms=self.settings.capture_interval_ms,
+			board_confidence_threshold=self.settings.board_confidence_threshold,
+			piece_confidence_threshold=self.settings.piece_confidence_threshold,
+			event_callback=self._on_pipeline_event,
+		)
+
+	def start(self) -> None:
+		"""Start automatic monitoring without blocking Tkinter."""
+		if self._running:
+			return
+		if self.pipeline is None:
+			self.pipeline = self._create_pipeline()
+		else:
+			self.pipeline.event_callback = self._on_pipeline_event
+		try:
+			self.pipeline.start()
+		except Exception as exc:
+			self._set_error(f"Unable to start monitoring: {exc}")
+			return
+		self._running = True
+		self.start_button.configure(state="disabled")
+		self.pause_button.configure(state="normal")
+		self.status_var.set("Monitoring started")
+
+	def pause(self) -> None:
+		"""Pause monitoring and leave the control window responsive."""
+		if self.pipeline:
+			self.pipeline.stop()
+		self._running = False
+		self.start_button.configure(state="normal")
+		self.pause_button.configure(state="disabled")
+		self.status_var.set("Paused")
+
+	def show_overlay(self) -> None:
+		if self.overlay is None:
+			from chess_analyser.overlay import TkinterOverlay
+
+			self.overlay = TkinterOverlay(self.root)
+			self.overlay.start_hotkey()
+		self.overlay.show()
+		self.overlay_status_var.set("Visible")
+
+	def hide_overlay(self) -> None:
+		if self.overlay:
+			self.overlay.hide()
+		self.overlay_status_var.set("Hidden")
+
+	def redetect(self) -> None:
+		if self.pipeline and hasattr(self.pipeline, "position_tracker"):
+			self.pipeline.position_tracker.reset()
+		self.board_status_var.set("Searching")
+		self.board_confidence_var.set("-")
+		self.position_status_var.set("Uncertain")
+		self.pieces_status_var.set("0/32 recognised")
+		self.status_var.set("Board re-detection requested")
+
+	def open_settings(self) -> None:
+		window = tk.Toplevel(self.root)
+		window.title("Chess Analyser Settings")
+		window.transient(self.root)
+		for row, label, value in (
+			(0, "Capture interval (ms)", self.settings.capture_interval_ms),
+			(1, "Stable frames", self.settings.position_stability_frames),
+			(2, "Debounce (ms)", self.settings.position_debounce_ms),
+			(3, "Hotkey", self.settings.overlay_hotkey.upper()),
+		):
+			ttk.Label(window, text=label).grid(row=row, column=0, sticky="w", padx=10, pady=6)
+			ttk.Label(window, text=str(value)).grid(row=row, column=1, sticky="w", padx=10, pady=6)
+		ttk.Button(window, text="Close", command=window.destroy).grid(row=4, column=0, columnspan=2, pady=10)
+
+	def _on_pipeline_event(self, event: PipelineEvent) -> None:
+		"""Marshal pipeline callbacks from worker threads to the Tk thread."""
+		if self._closed:
+			return
+		self.root.after(0, lambda: self._apply_pipeline_event(event))
+
+	def _apply_pipeline_event(self, event: PipelineEvent) -> None:
+		if event.state == "SEARCHING":
+			self.hide_overlay()
+		elif event.board is not None and self.overlay is not None:
+			best_move = event.analysis.best_move if event.analysis else None
+			self.overlay.update(event.board, best_move, event.analysis)
+		if event.state in {"SEARCHING", "POSITION_UNCERTAIN", "ERROR"}:
+			self.board_status_var.set("Searching" if event.state == "SEARCHING" else "Detected")
+			self.position_status_var.set("Uncertain" if event.state != "ERROR" else "Error")
+			self.status_var.set(event.message or event.state)
+		elif event.board is not None:
+			self.board_status_var.set("Detected")
+			self.board_confidence_var.set(f"{event.board.confidence:.0%}")
+		if event.position is not None:
+			self.position_status_var.set("Stable" if event.stability and event.stability.stable else "Transition")
+			self.pieces_status_var.set(f"{len(event.position.pieces)}/32 recognised")
+		if event.analysis is not None:
+			self._show_analysis(event.analysis)
+
 
 	def _on_analyse(self) -> None:
 		if self._worker and self._worker.is_alive():
@@ -188,5 +327,10 @@ class MainWindow:
 		if self._closed:
 			return
 		self._closed = True
-		self.engine.stop()
+		if self.pipeline:
+			self.pipeline.stop()
+		else:
+			self.engine.stop()
+		if self.overlay:
+			self.overlay.close()
 		self.root.destroy()
