@@ -1,12 +1,11 @@
-"""Unit tests for the Phase 3 Tkinter interface."""
+"""Unit tests for the minimal Chess Analyser control window."""
 
-import time
 import tkinter as tk
 
-import chess
 import pytest
 
 from chess_analyser.engine import EngineAnalysis, EngineLine
+from chess_analyser.pipeline import PipelineEvent
 from chess_analyser.ui import MainWindow, format_evaluation
 
 
@@ -33,13 +32,26 @@ class FakeEngine:
         self.stopped = True
 
 
-def create_window_or_skip(engine):
+class FakePipeline:
+    def __init__(self):
+        self.started = False
+        self.stopped = False
+        self.event_callback = None
+
+    def start(self):
+        self.started = True
+
+    def stop(self):
+        self.stopped = True
+
+
+def create_window_or_skip(engine, **kwargs):
     try:
         root = tk.Tk()
     except tk.TclError as exc:
         pytest.skip(f"Tkinter display unavailable: {exc}")
     root.withdraw()
-    return root, MainWindow(root, engine=engine)
+    return root, MainWindow(root, engine=engine, **kwargs)
 
 
 def test_status_formatting():
@@ -49,43 +61,51 @@ def test_status_formatting():
     assert format_evaluation(None, -2) == "Mate in 2 (black)"
 
 
-def test_fen_analysis_updates_ui_without_blocking_main_thread():
+def test_window_only_exposes_start_and_detect_board_buttons():
     engine = FakeEngine()
     root, window = create_window_or_skip(engine)
     try:
-        window.depth_var.set("12")
-        window.time_var.set("0.25")
-        window.multipv_var.set("2")
-        window.fen_var.set("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+        assert window.start_button["text"] == "Start"
+        assert window.calibrate_button["text"] == "Detect Board"
+        assert not hasattr(window, "analyse_button")
+        assert not hasattr(window, "alternatives")
+        assert not hasattr(window, "settings_button")
+    finally:
+        window.close()
 
-        window.analyse_button.invoke()
-        assert window._worker is not None
 
-        deadline = time.monotonic() + 2
-        while window.status_var.get() != "Analysis complete" and time.monotonic() < deadline:
-            root.update()
-            time.sleep(0.01)
+def test_start_stop_toggles_pipeline_lifecycle():
+    engine = FakeEngine()
+    pipeline = FakePipeline()
+    root, window = create_window_or_skip(engine, pipeline=pipeline)
+    try:
+        window.start()
+        assert pipeline.started
+        assert window.start_button["text"] == "Stop"
 
+        window.pause()
+        assert pipeline.stopped
+        assert window.start_button["text"] == "Start"
+        assert window.pipeline is None
+    finally:
+        window.close()
+
+
+def test_analysis_ready_event_updates_status_without_removed_widgets():
+    engine = FakeEngine()
+    root, window = create_window_or_skip(engine)
+    try:
+        analysis = engine.analyse("startpos", depth=10, time_ms=None, multipv=2)
+        event = PipelineEvent("ANALYSIS_READY", "Analysis complete", board=None, analysis=None)
+        window._apply_pipeline_event(event)
         assert window.status_var.get() == "Analysis complete"
-        assert window.best_move_var.get() == "e4"
-        assert window.evaluation_var.get() == "+0.42"
-        assert window.depth_display_var.get() == "12"
-        assert window.alternatives.get(0) == "d4  +0.31  (depth 12)"
-        assert engine.calls == [(window.fen_var.get(), 12, 250, 2)]
+        assert analysis.best_move_san == "e4"
     finally:
         window.close()
-        assert engine.stopped
 
 
-def test_invalid_fen_does_not_start_worker():
+def test_close_stops_engine_when_no_pipeline():
     engine = FakeEngine()
     root, window = create_window_or_skip(engine)
-    try:
-        window.fen_var.set("not a fen")
-        window._on_analyse()
-
-        assert window.status_var.get().startswith("Invalid analysis input:")
-        assert not engine.calls
-        assert str(window.analyse_button["state"]) == "normal"
-    finally:
-        window.close()
+    window.close()
+    assert engine.stopped
