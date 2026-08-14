@@ -100,6 +100,40 @@ def test_black_bottom_starting_fixture_recognizes_all_32_pieces():
 	assert all(result.confidence >= 0.65 for result in results.values())
 
 
+LICHESS_FIXTURE = Path("assets/LiChess/Screenshot 2026-08-14 122911.png")
+LICHESS_TEMPLATES = Path("assets/piece_templates/lichess")
+
+
+@pytest.mark.skipif(not LICHESS_FIXTURE.exists(), reason="Lichess screenshot is not available")
+def test_lichess_starting_fixture_recognizes_all_32_pieces():
+	image = cv2.imread(str(LICHESS_FIXTURE))
+	detected_board = BoardDetector(min_confidence=0.50).detect(image)
+	assert detected_board is not None
+	board = BoardDetection(
+		detected_board.x,
+		detected_board.y,
+		detected_board.width,
+		detected_board.height,
+		detected_board.square_size,
+		detected_board.confidence,
+		"white_bottom",
+	)
+	squares = SquareDetector().map_squares(board)
+	occupancy = OccupancyDetector().detect(image, squares)
+	results = TemplatePieceDetector(LICHESS_TEMPLATES).detect(image, squares, occupancy)
+	back = ("rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook")
+	expected = {
+		**{f"{file}1": f"white_{piece}" for file, piece in zip("abcdefgh", back)},
+		**{f"{file}2": "white_pawn" for file in "abcdefgh"},
+		**{f"{file}7": "black_pawn" for file in "abcdefgh"},
+		**{f"{file}8": f"black_{piece}" for file, piece in zip("abcdefgh", back)},
+	}
+
+	assert sum(value.status == "occupied" for value in occupancy.values()) == 32
+	assert all(results[name].piece == piece for name, piece in expected.items())
+	assert all(result.confidence >= 0.65 for result in results.values())
+
+
 @pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_empty_squares_are_not_classified_when_occupancy_is_supplied():

@@ -64,6 +64,7 @@ class AutomaticAnalysisPipeline:
 		side_to_move_detector: Any | None = None,
 		position_tracker: PositionTracker | None = None,
 		engine: Any | None = None,
+		clock_detector: Any | None = None,
 		capture_interval_ms: int = 100,
 		board_detection_interval_ms: int = 5000,
 		board_confidence_threshold: float = 0.58,
@@ -88,7 +89,7 @@ class AutomaticAnalysisPipeline:
 			confidence_threshold=piece_confidence_threshold
 		)
 		self.side_to_move_detector = side_to_move_detector or SideToMoveDetector()
-		self.clock_detector = ChessComClockDetector()
+		self.clock_detector = clock_detector or ChessComClockDetector()
 		self.position_tracker = position_tracker or PositionTracker()
 		self.engine = engine or StockfishEngine()
 		self.capture_interval_ms = capture_interval_ms

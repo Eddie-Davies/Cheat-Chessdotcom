@@ -35,6 +35,9 @@ class AppSettings:
     # Engine paths
     stockfish_path: str = ""
 
+    # Which chess site's board/piece visuals to match against
+    site: str = "chesscom"
+
     def __post_init__(self) -> None:
         """Validate settings after initialization."""
         if self.position_stability_frames < 1:
@@ -47,6 +50,8 @@ class AppSettings:
             raise ValueError("board_confidence_threshold must be between 0 and 1")
         if not 0 <= self.overlay_alpha <= 1.0:
             raise ValueError("overlay_alpha must be between 0 and 1")
+        if self.site not in {"chesscom", "lichess"}:
+            raise ValueError("site must be 'chesscom' or 'lichess'")
 
 
 # Global default settings instance
