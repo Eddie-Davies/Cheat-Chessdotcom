@@ -34,3 +34,17 @@ venv\Scripts\python.exe -m pytest -m standard_screen
 
 This targets the standard green starting-board screenshot and avoids the
 broader full-suite run when only the active board needs checking.
+
+## Training Sessions
+
+Use the separate recorder for live-game data collection:
+
+```text
+venv\Scripts\python.exe tools\record_training_session.py --interval 20
+```
+
+Training sessions are stored under `assets/training_sessions/`, not mixed
+with regression fixtures. They contain full-screen frames and metadata for
+future orientation, timer, board, and piece-recognition work.
+The recorder waits 5 seconds before its first capture so you can switch from
+VS Code to the chess game. Use `--initial-delay 0` to capture immediately.

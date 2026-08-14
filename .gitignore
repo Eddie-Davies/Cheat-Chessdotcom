@@ -119,6 +119,12 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# Stockfish binaries are too large to push; download/build them locally per
+# the installation guide. Folder structure is preserved via .gitkeep files.
+engine/stockfish/*/stockfish
+engine/stockfish/*/stockfish.exe
+
+
 # Pyre type checker
 .pyre/
 

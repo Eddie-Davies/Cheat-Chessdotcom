@@ -39,6 +39,15 @@ def test_piece_evidence_can_confirm_flipped_orientation():
     assert result.confidence > 0.7
 
 
+def test_screen_space_piece_colors_support_black_bottom_games():
+    result = OrientationDetector().detect(
+        corner_pieces={"top_left": "white_rook", "bottom_left": "black_rook"}
+    )
+
+    assert result.orientation == "black_bottom"
+    assert result.confidence > 0.7
+
+
 def test_conflicting_signals_return_unknown():
     result = OrientationDetector().detect(
         labels={"bottom": "1"},

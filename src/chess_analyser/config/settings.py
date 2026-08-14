@@ -16,11 +16,11 @@ class AppSettings:
 
     # Detection settings
     capture_interval_ms: int = 100
-    board_detection_interval_ms: int = 500
+    board_detection_interval_ms: int = 5000
     position_stability_frames: int = 3
     position_debounce_ms: int = 0
-    piece_confidence_threshold: float = 0.7
-    board_confidence_threshold: float = 0.7
+    piece_confidence_threshold: float = 0.45
+    board_confidence_threshold: float = 0.5
 
     # Overlay settings
     overlay_hotkey: str = "f8"

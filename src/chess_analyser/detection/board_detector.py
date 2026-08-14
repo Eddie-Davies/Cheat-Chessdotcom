@@ -58,9 +58,18 @@ class BoardDetector:
 		"""Return the highest-scoring board candidate, or ``None`` if uncertain."""
 		image = self._validate_image(screen_image)
 		working, scale = self._resize_for_search(image)
+		gray = cv2.cvtColor(working, cv2.COLOR_BGR2GRAY)
+		integral = cv2.integral(gray, sdepth=cv2.CV_64F)
+		gradient_x = np.abs(cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3))
+		gradient_y = np.abs(cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3))
 		candidates = self._find_candidates(working)
 		candidates.extend(self._grid_candidates(working))
-		scored = [self._score_candidate(working, candidate) for candidate in candidates]
+		scored = [
+			self._score_candidate(
+				working, candidate, gray=gray, gradient_x=gradient_x, gradient_y=gradient_y, integral=integral
+			)
+			for candidate in candidates
+		]
 		scored = [candidate for candidate in scored if candidate is not None]
 		if not scored:
 			return None
@@ -93,6 +102,7 @@ class BoardDetector:
 	def _snap_candidate_edges(self, image: np.ndarray, candidate: _Candidate) -> _Candidate:
 		"""Align nearby candidate edges to strong image transitions."""
 		gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+		integral = cv2.integral(gray, sdepth=cv2.CV_64F)
 		gradient_x = np.abs(cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3))
 		gradient_y = np.abs(cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3))
 		cell_size = max(8, round(candidate.width / 8))
@@ -140,6 +150,10 @@ class BoardDetector:
 				refined = self._score_candidate(
 					image,
 					(candidate_x, candidate_y, candidate.width, candidate.height),
+					gray=gray,
+					gradient_x=gradient_x,
+					gradient_y=gradient_y,
+					integral=integral,
 				)
 				if refined:
 					options.append(refined)
@@ -276,24 +290,37 @@ class BoardDetector:
 		self,
 		image: np.ndarray,
 		candidate: tuple[int, int, int, int],
+		*,
+		gray: np.ndarray | None = None,
+		gradient_x: np.ndarray | None = None,
+		gradient_y: np.ndarray | None = None,
+		integral: np.ndarray | None = None,
 	) -> _Candidate | None:
 		x, y, width, height = candidate
 		cell_width = width / 8
 		cell_height = height / 8
 		if min(cell_width, cell_height) < 8:
 			return None
-		gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-		values: list[float] = []
-		for row in range(8):
-			for column in range(8):
-				left = round(x + (column + 0.25) * cell_width)
-				right = round(x + (column + 0.75) * cell_width)
-				top = round(y + (row + 0.25) * cell_height)
-				bottom = round(y + (row + 0.75) * cell_height)
-				if right > gray.shape[1] or bottom > gray.shape[0]:
-					return None
-				values.append(float(np.mean(gray[top:bottom, left:right])))
-		cells = np.asarray(values, dtype=np.float32).reshape(8, 8)
+		if gray is None:
+			gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+		if integral is None:
+			integral = cv2.integral(gray, sdepth=cv2.CV_64F)
+		index = np.arange(8)
+		lefts = np.round(x + (index + 0.25) * cell_width).astype(np.int64)
+		rights = np.round(x + (index + 0.75) * cell_width).astype(np.int64)
+		tops = np.round(y + (index + 0.25) * cell_height).astype(np.int64)
+		bottoms = np.round(y + (index + 0.75) * cell_height).astype(np.int64)
+		if rights.max() > gray.shape[1] or bottoms.max() > gray.shape[0] or lefts.min() < 0 or tops.min() < 0:
+			return None
+		# Summed-area-table lookup avoids 64 separate np.mean calls per candidate.
+		sums = (
+			integral[bottoms[:, None], rights[None, :]]
+			- integral[tops[:, None], rights[None, :]]
+			- integral[bottoms[:, None], lefts[None, :]]
+			+ integral[tops[:, None], lefts[None, :]]
+		)
+		areas = np.maximum((bottoms[:, None] - tops[:, None]) * (rights[None, :] - lefts[None, :]), 1)
+		cells = (sums / areas).astype(np.float32)
 		cell_std = float(np.std(cells))
 		if cell_std < 4:
 			return None
@@ -319,8 +346,10 @@ class BoardDetector:
 				]
 			)
 		boundary_score = float(np.clip(np.mean(boundary_values) / (cell_std + 1e-6), 0, 1))
-		gradient_x = np.abs(cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3))
-		gradient_y = np.abs(cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3))
+		if gradient_x is None:
+			gradient_x = np.abs(cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3))
+		if gradient_y is None:
+			gradient_y = np.abs(cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3))
 		vertical_band = slice(round(y + 0.08 * height), round(y + 0.92 * height))
 		horizontal_band = slice(round(x + 0.08 * width), round(x + 0.92 * width))
 		left_edge = float(np.median(gradient_x[vertical_band, max(0, x - 1) : x + 2]))

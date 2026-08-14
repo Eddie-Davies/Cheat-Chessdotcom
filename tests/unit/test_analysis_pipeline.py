@@ -9,6 +9,7 @@ import pytest
 
 from chess_analyser.detection import (
 	BoardDetector,
+	OccupancyDetection,
 	OccupancyDetector,
 	OrientationDetection,
 	OrientationDetector,
@@ -173,3 +174,194 @@ def test_start_and_stop_run_capture_on_worker_thread():
 	assert pipeline.state == "SEARCHING"
 	assert pipeline._worker is not None
 	assert not pipeline._worker.is_alive()
+
+
+def test_confident_board_bounds_are_cached_between_refreshes():
+	class CountingBoardDetector:
+		def __init__(self):
+			self.calls = 0
+
+		def detect(self, _image):
+			self.calls += 1
+			return SimpleNamespace(
+				x=10,
+				y=20,
+				width=800,
+				height=800,
+				square_size=100.0,
+				confidence=0.60,
+				orientation="unknown",
+			)
+
+	detector = CountingBoardDetector()
+	pipeline = AutomaticAnalysisPipeline(
+		capture=FakeCapture(None),
+		board_detector=detector,
+		engine=FakeEngine(),
+		board_detection_interval_ms=10_000,
+	)
+
+	first = pipeline._get_board(None)
+	second = pipeline._get_board(None)
+
+	assert first is second
+	assert detector.calls == 1
+
+
+def test_tiny_redetection_is_ignored_in_favor_of_cached_board():
+	class SwitchingBoardDetector:
+		def __init__(self):
+			self.calls = 0
+
+		def detect(self, _image):
+			self.calls += 1
+			if self.calls == 1:
+				return SimpleNamespace(x=10, y=20, width=900, height=900, square_size=112.5, confidence=0.6, orientation="unknown")
+			return SimpleNamespace(x=1000, y=900, width=120, height=120, square_size=15.0, confidence=0.6, orientation="unknown")
+
+	pipeline = AutomaticAnalysisPipeline(
+		capture=FakeCapture(None),
+		board_detector=SwitchingBoardDetector(),
+		engine=FakeEngine(),
+		board_detection_interval_ms=0,
+	)
+
+	first = pipeline._get_board(None)
+	second = pipeline._get_board(None)
+
+	assert first.width == 900
+	assert second is first
+
+
+def test_confidently_stronger_resize_is_still_trusted():
+	class SwitchingBoardDetector:
+		def __init__(self):
+			self.calls = 0
+
+		def detect(self, _image):
+			self.calls += 1
+			if self.calls == 1:
+				return SimpleNamespace(x=10, y=20, width=900, height=900, square_size=112.5, confidence=0.6, orientation="unknown")
+			return SimpleNamespace(x=1000, y=900, width=120, height=120, square_size=15.0, confidence=0.95, orientation="unknown")
+
+	pipeline = AutomaticAnalysisPipeline(
+		capture=FakeCapture(None),
+		board_detector=SwitchingBoardDetector(),
+		engine=FakeEngine(),
+		board_detection_interval_ms=0,
+	)
+
+	pipeline._get_board(None)
+	second = pipeline._get_board(None)
+
+	assert second.width == 120
+
+
+def _make_squares_pipeline(occupancy_detector, piece_detector):
+	class FakeBoardDetector:
+		def detect(self, _image):
+			return _board_detection()
+
+	return AutomaticAnalysisPipeline(
+		capture=FakeCapture(None),
+		board_detector=FakeBoardDetector(),
+		orientation_detector=FakeOrientationDetector(),
+		occupancy_detector=occupancy_detector,
+		piece_detector=piece_detector,
+		engine=FakeEngine(),
+	)
+
+
+def _board_detection():
+	from chess_analyser.detection import BoardDetection
+
+	return BoardDetection(0, 0, 800, 800, 100.0, 0.9, "unknown")
+
+
+def test_a_few_uncertain_squares_are_treated_as_empty_instead_of_blocking():
+	class OneUncertainOccupancy:
+		def detect(self, _image, squares):
+			return {
+				name: OccupancyDetection(name, "uncertain", 0.3, 0.1, 0.05)
+				if name == "d1"
+				else OccupancyDetection(name, "empty", 0.9, 0.0, 0.0)
+				for name in squares
+			}
+
+	class NoPieceDetector:
+		def detect(self, _image, _squares, _occupancy):
+			return {}
+
+	pipeline = _make_squares_pipeline(OneUncertainOccupancy(), NoPieceDetector())
+
+	event = pipeline.process_frame(None)
+
+	assert event.state == POSITION_UNCERTAIN
+	assert "Piece recognition is uncertain" in event.message
+
+
+def test_many_uncertain_squares_still_block_analysis():
+	class ManyUncertainOccupancy:
+		def detect(self, _image, squares):
+			uncertain = {"a4", "a5", "b4", "b5", "c4"}
+			return {
+				name: OccupancyDetection(name, "uncertain", 0.3, 0.1, 0.05)
+				if name in uncertain
+				else OccupancyDetection(name, "empty", 0.9, 0.0, 0.0)
+				for name in squares
+			}
+
+	class NoPieceDetector:
+		def detect(self, _image, _squares, _occupancy):
+			return {}
+
+	pipeline = _make_squares_pipeline(ManyUncertainOccupancy(), NoPieceDetector())
+
+	event = pipeline.process_frame(None)
+
+	assert event.state == POSITION_UNCERTAIN
+	assert "Square occupancy is uncertain" in event.message
+
+
+def test_manual_calibration_skips_board_and_orientation_detection():
+	class FailingBoardDetector:
+		def detect(self, _image):
+			raise AssertionError("automatic board detection should be bypassed")
+
+	class FailingOrientationDetector:
+		def detect(self, **_kwargs):
+			raise AssertionError("automatic orientation detection should be bypassed")
+
+	class EmptyOccupancy:
+		def detect(self, _image, squares):
+			return {name: OccupancyDetection(name, "empty", 0.9, 0.0, 0.0) for name in squares}
+
+	class NoPieceDetector:
+		def detect(self, _image, _squares, _occupancy):
+			return {}
+
+	pipeline = AutomaticAnalysisPipeline(
+		capture=FakeCapture(None),
+		board_detector=FailingBoardDetector(),
+		orientation_detector=FailingOrientationDetector(),
+		occupancy_detector=EmptyOccupancy(),
+		piece_detector=NoPieceDetector(),
+		engine=FakeEngine(),
+	)
+	pipeline.set_manual_calibration(x=10, y=20, width=800, height=800, orientation="black_bottom")
+
+	event = pipeline.process_frame(None)
+
+	assert event.state != ERROR
+	assert event.board.orientation == "black_bottom"
+	assert event.board.confidence == 1.0
+
+
+def test_clear_manual_calibration_restores_automatic_detection():
+	pipeline = AutomaticAnalysisPipeline(capture=FakeCapture(None), board_detector=None, engine=FakeEngine())
+	pipeline.set_manual_calibration(x=0, y=0, width=800, height=800, orientation="white_bottom")
+
+	pipeline.clear_manual_calibration()
+
+	assert pipeline._manual_board is None
+	assert pipeline._manual_orientation is None

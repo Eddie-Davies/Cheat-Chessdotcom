@@ -19,7 +19,7 @@ def test_default_settings():
     assert DEFAULT_SETTINGS.engine_depth == 20
     assert DEFAULT_SETTINGS.multipv == 5
     assert DEFAULT_SETTINGS.overlay_alpha == 0.8
-    assert DEFAULT_SETTINGS.piece_confidence_threshold == 0.7
+    assert DEFAULT_SETTINGS.piece_confidence_threshold == 0.45
 
 
 def test_settings_validation():

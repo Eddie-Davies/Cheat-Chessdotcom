@@ -39,6 +39,31 @@ A cross-platform Python desktop application that automatically detects chessboar
 python -m chess_analyser
 ```
 
+The monitoring/control panel also has an explicit standalone launcher:
+
+```powershell
+venv\Scripts\python.exe tools\run_control_panel.py
+```
+
+Use this standalone tool when working with the control window. It keeps the
+monitoring interface separate from the core application entry point.
+
+To record full-screen training data while playing a game, use the separate
+observer tool:
+
+```powershell
+venv\Scripts\python.exe tools\record_training_session.py --interval 20
+```
+
+It waits 5 seconds for you to switch to the chess game, then captures every
+20 seconds until `Ctrl+C`. Each run
+creates `assets/training_sessions/<timestamp>_<label>/` containing full-screen
+PNG frames, `session.json`, and `metadata.jsonl`. Metadata includes capture
+timestamps, monitor geometry, and board-detection results when available.
+The tool only observes and saves screenshots; it never clicks, types, or
+sends input to the chess application. Use `--label` to identify a game and
+`--no-board-detection` if you only want raw frames.
+
 ## Development
 
 Run tests:
@@ -53,8 +78,21 @@ pytest --cov=src/chess_analyser
 
 ## Project Status
 
-Phase 13 is implemented. The near-term testing target is the green
-Chess.com board theme used during play.
+Phase 18 is implemented. The near-term testing target is the green
+Chess.com board theme used during play. The main application now opens a
+monitoring/configuration control window with Start, Pause, overlay controls,
+re-detection, settings, board/position/piece status, and the latest analysis.
+
+Stockfish is installed for Windows at
+`engine/stockfish/windows/stockfish.exe` from the official `sf_18` release.
+Real engine smoke testing returns multi-line analysis from the starting
+position. macOS and Linux binaries still need to be added on their respective
+platforms before packaging those targets.
+
+The Windows executable is included in the repository working tree and is
+automatically included by `chess_analyser.spec` when building the Windows
+application. It is a platform-specific binary; do not use it for macOS or
+Linux builds.
 
 Green-board screenshot regression tests should use fixtures under:
 
@@ -134,6 +172,16 @@ Phase 11 `SideToMoveDetector` combines active-player indicators, board
 highlights, active clocks, UI indicators, and confirmed history. It returns
 `white`, `black`, or `unknown` with confidence. `PositionReconstructor`
 rejects an unknown side rather than assuming White to move.
+
+Chess.com fixture support now derives orientation from recognized piece
+colors at the physical top and bottom board edges, so games where the user
+starts as Black remain supported. A board-relative clock detector reads the
+active top or bottom clock styling and converts that into the current side to
+move using the detected bottom-player color. The recorded game fixtures used
+for this behavior are under
+`assets/training_sessions/20260813_111916_chesscom_green_session/`.
+The Black-bottom regression screenshot is under
+`assets/training_sessions/20260813_115622_black_game/`.
 
 Phase 12 `PositionTracker` confirms a reconstructed position only after the
 configured number of consecutive matching hashes and optional debounce

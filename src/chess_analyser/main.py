@@ -25,6 +25,7 @@ def main(*, run_gui: bool = True) -> None:
     logger = setup_logging(
         level=getattr(logging, DEFAULT_SETTINGS.log_level),
         console=True,
+        log_file="logs/chess_analyser.log",
     )
 
     logger.info("Chess Analyser starting...")
@@ -36,7 +37,7 @@ def main(*, run_gui: bool = True) -> None:
         print("Chess Analyser initialized successfully")
         return
 
-    logger.info("Starting Phase 3 Tkinter interface")
+    logger.info("Starting monitoring and configuration interface")
     MainWindow().run()
 
 

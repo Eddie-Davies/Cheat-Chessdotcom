@@ -3,10 +3,12 @@
 from pathlib import Path
 
 import cv2
+import numpy as np
 import pytest
 
 from chess_analyser.detection import (
 	BoardDetection,
+	BoardDetector,
 	OccupancyDetector,
 	SquareDetector,
 	TemplatePieceDetector,
@@ -14,6 +16,7 @@ from chess_analyser.detection import (
 
 
 FIXTURE = Path("assets/test_screens/chesscom_standard_start/source.png")
+BLACK_START_FIXTURE = Path("assets/Screenshot 2026-08-13 121802.png")
 TEMPLATES = Path("assets/piece_templates")
 
 
@@ -74,6 +77,30 @@ def test_template_matching_handles_scaled_board():
 
 
 @pytest.mark.standard_screen
+@pytest.mark.skipif(not BLACK_START_FIXTURE.exists(), reason="Black-bottom screenshot is not available")
+def test_black_bottom_starting_fixture_recognizes_all_32_pieces():
+	image = cv2.imread(str(BLACK_START_FIXTURE))
+	detected_board = BoardDetector(min_confidence=0.50).detect(image)
+	assert detected_board is not None
+	board = BoardDetection(
+		detected_board.x,
+		detected_board.y,
+		detected_board.width,
+		detected_board.height,
+		detected_board.square_size,
+		detected_board.confidence,
+		"black_bottom",
+	)
+	squares = SquareDetector().map_squares(board)
+	occupancy = OccupancyDetector().detect(image, squares)
+	results = TemplatePieceDetector(TEMPLATES).detect(image, squares, occupancy)
+
+	assert sum(value.status == "occupied" for value in occupancy.values()) == 32
+	assert len(results) == 32
+	assert all(result.confidence >= 0.65 for result in results.values())
+
+
+@pytest.mark.standard_screen
 @pytest.mark.skipif(not FIXTURE.exists(), reason="Uploaded Chess.com fixture is not available")
 def test_empty_squares_are_not_classified_when_occupancy_is_supplied():
 	image, _board, squares, occupancy = fixture_data()
@@ -99,3 +126,46 @@ def test_piece_diagnostic_rendering(tmp_path: Path):
 def test_missing_template_directory_is_rejected(tmp_path: Path):
 	with pytest.raises(ValueError, match="No piece templates"):
 		TemplatePieceDetector(tmp_path / "missing")
+
+
+def test_multiple_samples_per_piece_class_are_loaded(tmp_path: Path):
+	for color in ("white", "black"):
+		for piece in ("pawn", "knight", "bishop", "rook", "queen", "king"):
+			directory = tmp_path / color
+			directory.mkdir(parents=True, exist_ok=True)
+			(source := TEMPLATES / color / f"{piece}.png").resolve()
+			(directory / f"{piece}.png").write_bytes(source.read_bytes())
+			(directory / f"{piece}_green_01.png").write_bytes(source.read_bytes())
+
+	detector = TemplatePieceDetector(tmp_path)
+
+	assert len(detector.templates) == 24
+
+
+def test_template_features_ignore_alternate_square_backgrounds():
+	image, _board, squares, _occupancy = fixture_data()
+	square = squares["e2"]
+	left, top, right, bottom = square.pixel_bounds
+	patch = image[top:bottom, left:right].copy()
+	alternate = patch.copy()
+	background = alternate[0, 0].copy()
+	foreground = cv2.cvtColor(alternate, cv2.COLOR_BGR2LAB)
+	background_mask = np.linalg.norm(foreground - foreground[0, 0], axis=2) < 12
+	alternate[background_mask] = (20, 180, 40)
+
+	original = TemplatePieceDetector._extract_features_from_image("original", patch)
+	changed = TemplatePieceDetector._extract_features_from_image("changed", alternate)
+
+	assert original.contour is not None
+	assert changed.contour is not None
+	assert TemplatePieceDetector._score(original, changed) >= 0.65
+
+
+def test_template_features_include_scale_normalized_negative_space():
+	image, _board, squares, _occupancy = fixture_data()
+	left, top, right, bottom = squares["e2"].pixel_bounds
+	features = TemplatePieceDetector._extract_features_from_image("pawn", image[top:bottom, left:right])
+
+	assert features.negative_space.shape == (24, 24)
+	assert 0.0 <= float(features.negative_space.min()) <= 1.0
+	assert 0.0 <= float(features.negative_space.max()) <= 1.0

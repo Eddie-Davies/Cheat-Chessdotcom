@@ -37,7 +37,7 @@ class OccupancyDetector:
 	def __init__(
 		self,
 		*,
-		inset_ratio: float = 0.08,
+		inset_ratio: float = 0.12,
 		occupied_threshold: float = 0.58,
 		empty_threshold: float = 0.30,
 	) -> None:
@@ -161,6 +161,7 @@ class _TemplateFeatures:
 	mask: np.ndarray
 	contour: np.ndarray | None
 	color_polarity: float
+	negative_space: np.ndarray
 
 
 class PieceDetector(ABC):
@@ -244,9 +245,11 @@ class TemplatePieceDetector(PieceDetector):
 		templates: list[_TemplateFeatures] = []
 		for color in PIECE_COLORS:
 			for piece in PIECE_NAMES:
-				path = self.template_dir / color / f"{piece}.png"
-				image = cv2.imread(str(path))
-				if image is not None:
+				paths = sorted((self.template_dir / color).glob(f"{piece}*.png"))
+				for path in paths:
+					image = cv2.imread(str(path))
+					if image is None:
+						continue
 					features = self._extract_features_from_image(f"{color}_{piece}", image)
 					if features.contour is not None:
 						templates.append(features)
@@ -271,7 +274,7 @@ class TemplatePieceDetector(PieceDetector):
 	@staticmethod
 	def _extract_features_from_image(name: str, patch: np.ndarray) -> _TemplateFeatures:
 		if patch.ndim != 3 or min(patch.shape[:2]) < 8:
-			return _TemplateFeatures(name, np.zeros((96, 96), np.uint8), None, 0.0)
+			return _TemplateFeatures(name, np.zeros((96, 96), np.uint8), None, 0.0, np.zeros((24, 24), np.float32))
 		height, width = patch.shape[:2]
 		inset_y = max(1, round(height * 0.08))
 		inset_x = max(1, round(width * 0.08))
@@ -293,11 +296,15 @@ class TemplatePieceDetector(PieceDetector):
 		mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
 		contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 		if not contours:
-			return _TemplateFeatures(name, cv2.resize(mask, (96, 96)), None, 0.0)
+			normalized_mask = cv2.resize(mask, (96, 96), interpolation=cv2.INTER_NEAREST)
+			negative_space = 1.0 - cv2.resize(normalized_mask, (24, 24), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
+			return _TemplateFeatures(name, normalized_mask, None, 0.0, negative_space)
 		contour = max(contours, key=cv2.contourArea)
 		foreground = lab[:, :, 0][mask > 0]
-		polarity = float((np.median(foreground) - background[0]) / 100) if foreground.size else 0.0
-		return _TemplateFeatures(name, cv2.resize(mask, (96, 96), interpolation=cv2.INTER_NEAREST), contour, polarity)
+		polarity = float(np.median(foreground) / 100) if foreground.size else 0.0
+		normalized_mask = cv2.resize(mask, (96, 96), interpolation=cv2.INTER_NEAREST)
+		negative_space = 1.0 - cv2.resize(normalized_mask, (24, 24), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
+		return _TemplateFeatures(name, normalized_mask, contour, polarity, negative_space)
 
 	@staticmethod
 	def _score(sample: _TemplateFeatures, template: _TemplateFeatures) -> float:
@@ -306,6 +313,7 @@ class TemplatePieceDetector(PieceDetector):
 		shape_distance = cv2.matchShapes(sample.contour, template.contour, cv2.CONTOURS_MATCH_I1, 0.0)
 		shape_score = float(np.exp(-4.0 * min(shape_distance, 2.0)))
 		mask_score = float(np.mean(sample.mask == template.mask))
+		negative_space_score = float(1.0 - np.mean(np.abs(sample.negative_space - template.negative_space)))
 		color_score = float(np.clip(1.0 - abs(sample.color_polarity - template.color_polarity) / 1.5, 0, 1))
 		return float(np.clip(0.55 * shape_score + 0.25 * mask_score + 0.20 * color_score, 0, 1))
 

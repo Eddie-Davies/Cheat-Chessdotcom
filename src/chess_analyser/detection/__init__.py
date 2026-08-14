@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
 	from .board_detector import BoardDetection, BoardDetector
+	from .chesscom_ui import ChessComClockDetector, ClockSignal
 	from .orientation import OrientationDetection, OrientationDetector
 	from .piece_detector import OccupancyDetection, OccupancyDetector, PieceDetection, PieceDetector, TemplatePieceDetector
 	from .side_to_move import SideToMoveDetection, SideToMoveDetector
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
 __all__ = [
 	"BoardDetection",
 	"BoardDetector",
+	"ChessComClockDetector",
+	"ClockSignal",
 	"OrientationDetection",
 	"OrientationDetector",
 	"OccupancyDetection",
@@ -29,6 +32,7 @@ __all__ = [
 def __getattr__(name: str):
 	if name in __all__:
 		from .board_detector import BoardDetection, BoardDetector
+		from .chesscom_ui import ChessComClockDetector, ClockSignal
 		from .orientation import OrientationDetection, OrientationDetector
 		from .piece_detector import OccupancyDetection, OccupancyDetector, PieceDetection, PieceDetector, TemplatePieceDetector
 		from .side_to_move import SideToMoveDetection, SideToMoveDetector
@@ -37,6 +41,8 @@ def __getattr__(name: str):
 		return {
 			"BoardDetection": BoardDetection,
 			"BoardDetector": BoardDetector,
+			"ChessComClockDetector": ChessComClockDetector,
+			"ClockSignal": ClockSignal,
 			"OrientationDetection": OrientationDetection,
 			"OrientationDetector": OrientationDetector,
 			"OccupancyDetection": OccupancyDetection,

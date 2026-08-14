@@ -18,6 +18,7 @@ from chess_analyser.engine import (
 from chess_analyser.config import AppSettings, DEFAULT_SETTINGS
 from chess_analyser.pipeline import AutomaticAnalysisPipeline, PipelineEvent
 
+from .calibration import BoardCalibration, BoardCalibrationWindow
 from .status import format_evaluation, format_line
 
 
@@ -38,7 +39,10 @@ class MainWindow:
 		self.engine = engine or StockfishEngine(self.settings.stockfish_path or None)
 		self.pipeline = pipeline
 		self.overlay = overlay
+		self.log_panel: Any | None = None
+		self.calibration: BoardCalibration | None = None
 		self._running = False
+		self._board_seen = False
 		self._results: queue.Queue[tuple[str, object]] = queue.Queue()
 		self._worker: threading.Thread | None = None
 		self._closed = False
@@ -62,6 +66,7 @@ class MainWindow:
 		self.engine_status_var = tk.StringVar(value="Stockfish")
 		self.overlay_status_var = tk.StringVar(value="Hidden")
 		self.hotkey_status_var = tk.StringVar(value=self.settings.overlay_hotkey.upper())
+		self.calibration_status_var = tk.StringVar(value="Automatic")
 		self.best_move_var = tk.StringVar(value="-")
 		self.evaluation_var = tk.StringVar(value="-")
 		self.depth_display_var = tk.StringVar(value="-")
@@ -88,6 +93,7 @@ class MainWindow:
 			(4, "Engine", self.engine_status_var),
 			(5, "Overlay", self.overlay_status_var),
 			(6, "Hotkey", self.hotkey_status_var),
+			(7, "Calibration", self.calibration_status_var),
 		):
 			ttk.Label(monitor_frame, text=f"{label}:").grid(row=row, column=0, sticky="w", pady=2)
 			ttk.Label(monitor_frame, textvariable=variable).grid(row=row, column=1, sticky="w", pady=2)
@@ -109,8 +115,16 @@ class MainWindow:
 		self.show_overlay_button.pack(side="left", padx=(6, 0))
 		self.hide_overlay_button = ttk.Button(controls_frame, text="Hide Overlay", command=self.hide_overlay)
 		self.hide_overlay_button.pack(side="left", padx=(6, 0))
+		self.show_log_button = ttk.Button(controls_frame, text="Show Log", command=self.show_log)
+		self.show_log_button.pack(side="left", padx=(6, 0))
+		self.hide_log_button = ttk.Button(controls_frame, text="Hide Log", command=self.hide_log)
+		self.hide_log_button.pack(side="left", padx=(6, 0))
 		self.redetect_button = ttk.Button(controls_frame, text="Re-detect Board", command=self.redetect)
 		self.redetect_button.pack(side="left", padx=(6, 0))
+		self.calibrate_button = ttk.Button(controls_frame, text="Calibrate Board", command=self.calibrate_board)
+		self.calibrate_button.pack(side="left", padx=(6, 0))
+		self.clear_calibration_button = ttk.Button(controls_frame, text="Clear Calibration", command=self.clear_calibration)
+		self.clear_calibration_button.pack(side="left", padx=(6, 0))
 		self.settings_button = ttk.Button(controls_frame, text="Settings", command=self.open_settings)
 		self.settings_button.pack(side="right")
 
@@ -152,12 +166,19 @@ class MainWindow:
 
 	def _create_pipeline(self) -> AutomaticAnalysisPipeline:
 		from chess_analyser.capture import ScreenCapture
+		from chess_analyser.detection import BoardDetector
 
 		return AutomaticAnalysisPipeline(
 			capture=ScreenCapture(),
+			board_detector=BoardDetector(min_confidence=self.settings.board_confidence_threshold),
+			engine=self.engine,
 			capture_interval_ms=self.settings.capture_interval_ms,
+			board_detection_interval_ms=self.settings.board_detection_interval_ms,
 			board_confidence_threshold=self.settings.board_confidence_threshold,
 			piece_confidence_threshold=self.settings.piece_confidence_threshold,
+			engine_depth=self.settings.engine_depth,
+			engine_time_ms=self.settings.engine_time_ms,
+			engine_multipv=self.settings.multipv,
 			event_callback=self._on_pipeline_event,
 		)
 
@@ -169,12 +190,23 @@ class MainWindow:
 			self.pipeline = self._create_pipeline()
 		else:
 			self.pipeline.event_callback = self._on_pipeline_event
+		if self.calibration is not None:
+			self.pipeline.set_manual_calibration(
+				x=self.calibration.x,
+				y=self.calibration.y,
+				width=self.calibration.width,
+				height=self.calibration.height,
+				orientation=self.calibration.orientation,
+			)
 		try:
 			self.pipeline.start()
 		except Exception as exc:
 			self._set_error(f"Unable to start monitoring: {exc}")
 			return
 		self._running = True
+		self._ensure_overlay()
+		self._ensure_log_panel()
+		self.log_panel.show()
 		self.start_button.configure(state="disabled")
 		self.pause_button.configure(state="normal")
 		self.status_var.set("Monitoring started")
@@ -183,19 +215,47 @@ class MainWindow:
 		"""Pause monitoring and leave the control window responsive."""
 		if self.pipeline:
 			self.pipeline.stop()
+			self.pipeline = None
+		self.hide_overlay()
 		self._running = False
 		self.start_button.configure(state="normal")
 		self.pause_button.configure(state="disabled")
 		self.status_var.set("Paused")
 
 	def show_overlay(self) -> None:
-		if self.overlay is None:
-			from chess_analyser.overlay import TkinterOverlay
-
-			self.overlay = TkinterOverlay(self.root)
-			self.overlay.start_hotkey()
+		self._ensure_overlay()
 		self.overlay.show()
 		self.overlay_status_var.set("Visible")
+
+	def show_log(self) -> None:
+		self._ensure_log_panel()
+		self.log_panel.show()
+
+	def hide_log(self) -> None:
+		if self.log_panel:
+			self.log_panel.hide()
+
+	def _ensure_log_panel(self) -> None:
+		if self.log_panel is not None:
+			return
+		from chess_analyser.overlay import LogPanel
+
+		# Docked to the left edge so it never overlaps the captured board.
+		self.log_panel = LogPanel(self.root)
+
+	def _ensure_overlay(self) -> None:
+		if self.overlay is not None:
+			return
+		from chess_analyser.overlay import MovePanel
+
+		# A docked side panel, not an on-board overlay, so it never appears
+		# inside the region being screen-captured for board/piece detection.
+		self.overlay = MovePanel(self.root)
+		status = self.overlay.start_hotkey()
+		self.overlay.hide()
+		self.hotkey_status_var.set(
+			status.key.upper() if status.registered else f"{status.key.upper()} unavailable"
+		)
 
 	def hide_overlay(self) -> None:
 		if self.overlay:
@@ -210,6 +270,32 @@ class MainWindow:
 		self.position_status_var.set("Uncertain")
 		self.pieces_status_var.set("0/32 recognised")
 		self.status_var.set("Board re-detection requested")
+
+	def calibrate_board(self) -> None:
+		"""Let the user click the board's corners and pick a color instead of
+		relying on automatic detection; see AGENTS.md 3.5 for this fallback."""
+		BoardCalibrationWindow(self.root, on_complete=self._apply_calibration)
+
+	def _apply_calibration(self, calibration: BoardCalibration) -> None:
+		self.calibration = calibration
+		color = "White" if calibration.orientation == "white_bottom" else "Black"
+		self.calibration_status_var.set(f"Manual ({color}, {calibration.width}x{calibration.height})")
+		if self.pipeline is not None:
+			self.pipeline.set_manual_calibration(
+				x=calibration.x,
+				y=calibration.y,
+				width=calibration.width,
+				height=calibration.height,
+				orientation=calibration.orientation,
+			)
+		self.status_var.set("Board calibrated")
+
+	def clear_calibration(self) -> None:
+		self.calibration = None
+		self.calibration_status_var.set("Automatic")
+		if self.pipeline is not None:
+			self.pipeline.clear_manual_calibration()
+		self.status_var.set("Calibration cleared; using automatic detection")
 
 	def open_settings(self) -> None:
 		window = tk.Toplevel(self.root)
@@ -232,17 +318,34 @@ class MainWindow:
 		self.root.after(0, lambda: self._apply_pipeline_event(event))
 
 	def _apply_pipeline_event(self, event: PipelineEvent) -> None:
+		if self.log_panel is not None:
+			self.log_panel.log_event(event)
 		if event.state == "SEARCHING":
 			self.hide_overlay()
-		elif event.board is not None and self.overlay is not None:
-			best_move = event.analysis.best_move if event.analysis else None
-			self.overlay.update(event.board, best_move, event.analysis)
+			self.board_status_var.set("Lost" if self._board_seen else "Searching")
+			self.board_confidence_var.set("-")
+		elif event.state == "ANALYSIS_READY" and event.board is not None and event.analysis is not None:
+			self._ensure_overlay()
+			self.overlay.update(event.board, event.analysis.best_move, event.analysis, position=event.position)
+			self.overlay_status_var.set("Visible")
+		elif event.state == "ERROR":
+			self.hide_overlay()
+		# POSITION_UNCERTAIN is often transient between analyzed frames; hiding
+		# the panel on every occurrence was causing visible flicker, so the
+		# last shown move now stays up until the board is actually lost.
 		if event.state in {"SEARCHING", "POSITION_UNCERTAIN", "ERROR"}:
-			self.board_status_var.set("Searching" if event.state == "SEARCHING" else "Detected")
+			if event.state == "POSITION_UNCERTAIN" and event.board is not None:
+				self.board_status_var.set("Detected")
+				self._board_seen = True
+			elif event.state == "ERROR":
+				self.board_status_var.set("Error")
 			self.position_status_var.set("Uncertain" if event.state != "ERROR" else "Error")
+			if event.state == "ERROR":
+				self.engine_status_var.set("Error")
 			self.status_var.set(event.message or event.state)
 		elif event.board is not None:
 			self.board_status_var.set("Detected")
+			self._board_seen = True
 			self.board_confidence_var.set(f"{event.board.confidence:.0%}")
 		if event.position is not None:
 			self.position_status_var.set("Stable" if event.stability and event.stability.stable else "Transition")
@@ -318,6 +421,7 @@ class MainWindow:
 		self.engine_status_var.set("Stockfish: unavailable" if "Stockfish" in message else "Stockfish: ready")
 		self.status_var.set(message)
 
+
 	def run(self) -> None:
 		"""Start the Tkinter event loop."""
 		self.root.mainloop()
@@ -333,4 +437,6 @@ class MainWindow:
 			self.engine.stop()
 		if self.overlay:
 			self.overlay.close()
+		if self.log_panel:
+			self.log_panel.close()
 		self.root.destroy()

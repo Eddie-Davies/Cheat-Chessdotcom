@@ -2,6 +2,7 @@
 
 from .arrows import ArrowGeometry, ArrowRenderer
 from .evaluation_panel import EvaluationPanel, EvaluationPanelConfig
+from .move_panel import MovePanel, describe_move
 from .hotkeys import (
 	GlobalHotkeyService,
 	HotkeyBackend,
@@ -24,6 +25,8 @@ __all__ = [
 	"HotkeyPermissionError",
 	"HotkeyStatus",
 	"HotkeyUnavailableError",
+	"MovePanel",
+	"describe_move",
 	"Overlay",
 	"OverlayGeometry",
 	"OverlayPlatform",

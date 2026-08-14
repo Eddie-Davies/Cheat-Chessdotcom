@@ -1,0 +1,2 @@
+{"frame": "frame_000001.png", "captured_at": "2026-08-13T10:19:16.692555+00:00", "width": 1920, "height": 1200, "channels": 3, "monitors": [{"index": 1, "x": 0, "y": 0, "width": 1920, "height": 1200}], "board": null}
+{"frame": "frame_000002.png", "captured_at": "2026-08-13T10:23:09.733909+00:00", "width": 1920, "height": 1200, "channels": 3, "monitors": [{"index": 1, "x": 0, "y": 0, "width": 1920, "height": 1200}], "board": {"x": 255, "y": 159, "width": 920, "height": 920, "square_size": 115.02857142857144, "confidence": 0.5846256207769396, "orientation": "unknown"}}
