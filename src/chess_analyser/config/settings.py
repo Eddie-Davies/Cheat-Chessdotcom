@@ -28,6 +28,10 @@ class AppSettings:
     show_evaluation: bool = True
     show_alternatives: bool = True
 
+    # Brief on-board arrow flash (auto-shown on new moves, or replayed via hotkey)
+    arrow_flash_hotkey: str = "f10"
+    arrow_flash_duration_ms: int = 1200
+
     # Debug settings
     debug_mode: bool = False
     log_level: str = "INFO"
@@ -52,6 +56,8 @@ class AppSettings:
             raise ValueError("overlay_alpha must be between 0 and 1")
         if self.site not in {"chesscom", "lichess"}:
             raise ValueError("site must be 'chesscom' or 'lichess'")
+        if self.arrow_flash_duration_ms <= 0:
+            raise ValueError("arrow_flash_duration_ms must be greater than 0")
 
 
 # Global default settings instance

@@ -13,10 +13,12 @@ from .hotkeys import (
 	OverlayVisibilityController,
 )
 from .evaluation_panel import EvaluationPanel, EvaluationPanelConfig
+from .arrow_flash import ArrowFlashOverlay
 from .move_panel import MovePanel, describe_move
 from .overlay_window import Overlay, OverlayGeometry, OverlayPlatform, TkinterOverlay
 
 __all__ = [
+	"ArrowFlashOverlay",
 	"ArrowGeometry",
 	"ArrowRenderer",
 	"EvaluationPanel",

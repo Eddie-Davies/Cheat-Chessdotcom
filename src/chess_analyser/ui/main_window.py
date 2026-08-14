@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from tkinter import ttk
 from typing import Any
@@ -12,6 +13,8 @@ from chess_analyser.overlay import GlobalHotkeyService
 from chess_analyser.pipeline import AutomaticAnalysisPipeline, PipelineEvent
 
 from .calibration import BoardCalibration, BoardCalibrationWindow
+
+_logger = logging.getLogger(__name__)
 
 
 class MainWindow:
@@ -38,6 +41,8 @@ class MainWindow:
 		self.engine = engine or StockfishEngine(self.settings.stockfish_path or None)
 		self.pipeline = pipeline
 		self.overlay = overlay
+		self.arrow_overlay: Any | None = None
+		self._last_flashed_move: str | None = None
 		self.calibration: BoardCalibration | None = None
 		self._running = False
 		self._closed = False
@@ -177,6 +182,9 @@ class MainWindow:
 			self.pipeline.stop()
 			self.pipeline = None
 		self._running = False
+		self._last_flashed_move = None
+		if self.arrow_overlay is not None:
+			self.arrow_overlay.hide()
 		self.start_button.configure(text="Start")
 		self.site_combo.configure(state="readonly")
 		self.status_var.set("Stopped")
@@ -190,6 +198,16 @@ class MainWindow:
 		# inside the region being screen-captured for board/piece detection.
 		self.overlay = MovePanel(self.root)
 		status = self.overlay.start_hotkey()
+		if not status.registered:
+			self.status_var.set(status.message)
+
+	def _ensure_arrow_overlay(self) -> None:
+		if self.arrow_overlay is not None:
+			return
+		from chess_analyser.overlay import ArrowFlashOverlay
+
+		self.arrow_overlay = ArrowFlashOverlay(self.root, duration_ms=self.settings.arrow_flash_duration_ms)
+		status = self.arrow_overlay.start_hotkey(key=self.settings.arrow_flash_hotkey)
 		if not status.registered:
 			self.status_var.set(status.message)
 
@@ -230,12 +248,31 @@ class MainWindow:
 			user_color = "white" if event.board.orientation == "white_bottom" else "black"
 			if event.position is not None and event.position.side_to_move == user_color:
 				self.overlay.update(event.board, event.analysis.best_move, event.analysis, position=event.position)
+				self._flash_move_on_board(event.board, event.analysis.best_move)
 			else:
 				# Not the user's color to move; never suggest the opponent's move.
 				self.overlay.set_status("Waiting for opponent's move...")
+				self._last_flashed_move = None
 		# The panel's visibility is only ever controlled by the user's F8
 		# hotkey; no pipeline state here shows or hides it.
 		self.status_var.set(event.message or event.state)
+
+	def _flash_move_on_board(self, board: Any, best_move: str | None) -> None:
+		"""Briefly draw the suggested move on the real board so the user can
+		play it faster; auto-hides so it never lingers into a later capture."""
+		if not best_move:
+			return
+		try:
+			self._ensure_arrow_overlay()
+			self.arrow_overlay.set_pending_move(board, best_move)
+			if best_move == self._last_flashed_move:
+				return
+			self._last_flashed_move = best_move
+			self.arrow_overlay.flash(board, best_move)
+		except Exception:
+			# The arrow flash is a convenience, not core functionality; a bad
+			# board/move should never break status updates or the move panel.
+			_logger.exception("Unable to flash the on-board move arrow")
 
 	def run(self) -> None:
 		"""Start the Tkinter event loop."""
@@ -253,5 +290,7 @@ class MainWindow:
 			self.engine.stop()
 		if self.overlay:
 			self.overlay.close()
+		if self.arrow_overlay:
+			self.arrow_overlay.close()
 		self.root.destroy()
 
