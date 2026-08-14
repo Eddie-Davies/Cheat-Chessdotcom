@@ -1,8 +1,8 @@
 """Overlay public API."""
 
 from .arrows import ArrowGeometry, ArrowRenderer
-from .evaluation_panel import EvaluationPanel, EvaluationPanelConfig
-from .move_panel import MovePanel, describe_move
+# hotkeys must load before evaluation_panel: evaluation_panel pulls in
+# chess_analyser.ui, whose main_window imports GlobalHotkeyService back from here.
 from .hotkeys import (
 	GlobalHotkeyService,
 	HotkeyBackend,
@@ -12,6 +12,8 @@ from .hotkeys import (
 	HotkeyUnavailableError,
 	OverlayVisibilityController,
 )
+from .evaluation_panel import EvaluationPanel, EvaluationPanelConfig
+from .move_panel import MovePanel, describe_move
 from .overlay_window import Overlay, OverlayGeometry, OverlayPlatform, TkinterOverlay
 
 __all__ = [
