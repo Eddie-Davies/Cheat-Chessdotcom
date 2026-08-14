@@ -21,6 +21,9 @@ class MainWindow:
 	behind the scenes; there is intentionally no settings UI to configure them.
 	"""
 
+	_SITE_LABELS = {"chesscom": "Chess.com", "lichess": "Lichess"}
+	_SITE_KEYS = {"Chess.com": "chesscom", "Lichess": "lichess"}
+
 	def __init__(
 		self,
 		root: tk.Tk | None = None,
@@ -42,8 +45,10 @@ class MainWindow:
 
 		self.root.title("Chess Analyser")
 		self.root.minsize(280, 140)
+		self.root.attributes("-topmost", True)
 		self.root.protocol("WM_DELETE_WINDOW", self.close)
 		self.status_var = tk.StringVar(value="Ready")
+		self.site_var = tk.StringVar(value=self._SITE_LABELS.get(self.settings.site, "Chess.com"))
 		self._build_widgets()
 		self._position_bottom_right()
 		self.window_hotkey_service = GlobalHotkeyService(key="f9")
@@ -67,6 +72,14 @@ class MainWindow:
 		self.start_button.pack(side="left")
 		self.calibrate_button = ttk.Button(controls_frame, text="Detect Board", command=self.calibrate_board)
 		self.calibrate_button.pack(side="left", padx=(6, 0))
+		self.site_combo = ttk.Combobox(
+			controls_frame,
+			textvariable=self.site_var,
+			values=list(self._SITE_KEYS),
+			state="readonly",
+			width=10,
+		)
+		self.site_combo.pack(side="left", padx=(6, 0))
 
 		ttk.Label(container, textvariable=self.status_var, relief="sunken", anchor="w").grid(
 			row=2, column=0, sticky="ew", pady=(12, 0)
@@ -81,6 +94,7 @@ class MainWindow:
 			self.root.withdraw()
 		else:
 			self.root.deiconify()
+			self.root.attributes("-topmost", True)
 			self._position_bottom_right()
 		self._window_visible = not self._window_visible
 
@@ -96,11 +110,21 @@ class MainWindow:
 
 	def _create_pipeline(self) -> AutomaticAnalysisPipeline:
 		from chess_analyser.capture import ScreenCapture
-		from chess_analyser.detection import BoardDetector
+		from chess_analyser.detection import BoardDetector, ChessComClockDetector, LichessClockDetector, TemplatePieceDetector
+
+		site = self._SITE_KEYS.get(self.site_var.get(), "chesscom")
+		if site == "lichess":
+			template_dir = "assets/piece_templates/lichess"
+			clock_detector = LichessClockDetector()
+		else:
+			template_dir = "assets/piece_templates"
+			clock_detector = ChessComClockDetector()
 
 		return AutomaticAnalysisPipeline(
 			capture=ScreenCapture(),
 			board_detector=BoardDetector(min_confidence=self.settings.board_confidence_threshold),
+			piece_detector=TemplatePieceDetector(template_dir),
+			clock_detector=clock_detector,
 			engine=self.engine,
 			capture_interval_ms=self.settings.capture_interval_ms,
 			board_detection_interval_ms=self.settings.board_detection_interval_ms,
@@ -144,6 +168,7 @@ class MainWindow:
 		# Shown immediately (blank until a move is available); only F8 hides it.
 		self.overlay.show()
 		self.start_button.configure(text="Stop")
+		self.site_combo.configure(state="disabled")
 		self.status_var.set("Monitoring started")
 
 	def pause(self) -> None:
@@ -153,6 +178,7 @@ class MainWindow:
 			self.pipeline = None
 		self._running = False
 		self.start_button.configure(text="Start")
+		self.site_combo.configure(state="readonly")
 		self.status_var.set("Stopped")
 
 	def _ensure_overlay(self) -> None:

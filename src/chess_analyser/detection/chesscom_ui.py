@@ -25,6 +25,17 @@ class ClockSignal:
 	signals: tuple[str, ...] = ()
 
 
+class NullClockDetector:
+	"""Fallback for sites without a calibrated clock heuristic yet (e.g. Lichess).
+
+	Always reports an unknown active side rather than guessing, so the
+	pipeline honestly reports "side to move unknown" instead of a wrong turn.
+	"""
+
+	def detect(self, _image: np.ndarray, _board: BoardDetection) -> ClockSignal:
+		return ClockSignal(UNKNOWN, 0.0, 0.0)
+
+
 class ChessComClockDetector:
 	"""Read active/inactive clock styling relative to detected board geometry."""
 
