@@ -45,7 +45,7 @@ class MainWindow:
 		self.root.protocol("WM_DELETE_WINDOW", self.close)
 		self.status_var = tk.StringVar(value="Ready")
 		self._build_widgets()
-		self._position_bottom_left()
+		self._position_bottom_right()
 		self.window_hotkey_service = GlobalHotkeyService(key="f9")
 		status = self.window_hotkey_service.start(self._toggle_window_visibility_threadsafe)
 		if not status.registered:
@@ -81,14 +81,18 @@ class MainWindow:
 			self.root.withdraw()
 		else:
 			self.root.deiconify()
-			self._position_bottom_left()
+			self._position_bottom_right()
 		self._window_visible = not self._window_visible
 
-	def _position_bottom_left(self) -> None:
+	def _position_bottom_right(self) -> None:
 		self.root.update_idletasks()
+		width = self.root.winfo_width()
 		height = self.root.winfo_height()
+		screen_width = self.root.winfo_screenwidth()
 		screen_height = self.root.winfo_screenheight()
-		self.root.geometry(f"+10+{max(0, screen_height - height - 60)}")
+		x = max(0, screen_width - width - 10)
+		y = max(0, screen_height - height - 60)
+		self.root.geometry(f"+{x}+{y}")
 
 	def _create_pipeline(self) -> AutomaticAnalysisPipeline:
 		from chess_analyser.capture import ScreenCapture
