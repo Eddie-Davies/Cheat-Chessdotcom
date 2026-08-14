@@ -207,6 +207,16 @@ class MainWindow:
 		status = self.overlay.start_hotkey()
 		if not status.registered:
 			self.status_var.set(status.message)
+		# F8 hides the move panel; make it also hide any on-board arrow flash so
+		# the user can go fully incognito across the board with one hotkey.
+		original_hide = self.overlay.hide
+
+		def hide_with_arrow_suppression() -> None:
+			original_hide()
+			if self.arrow_overlay is not None:
+				self.arrow_overlay.hide()
+
+		self.overlay.hide = hide_with_arrow_suppression
 
 	def _ensure_arrow_overlay(self) -> None:
 		if self.arrow_overlay is not None:
@@ -285,6 +295,10 @@ class MainWindow:
 		"""Briefly draw the suggested move on the real board so the user can
 		play it faster; auto-hides so it never lingers into a later capture."""
 		if not best_move:
+			return
+		if self.overlay is not None and not getattr(self.overlay, "visible", True):
+			# Incognito mode: the move panel is hidden via F8, so don't pop the
+			# arrow back up over the board either.
 			return
 		try:
 			self._ensure_arrow_overlay()

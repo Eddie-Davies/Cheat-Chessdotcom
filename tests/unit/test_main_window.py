@@ -158,3 +158,56 @@ def test_move_is_only_shown_on_the_users_own_turn():
         assert window.overlay.statuses == ["Waiting for opponent's move..."]
     finally:
         window.close()
+
+
+class FakeArrowOverlay:
+    def __init__(self):
+        self.flashes = []
+
+    def set_pending_move(self, board, move):
+        pass
+
+    def flash(self, board, move):
+        self.flashes.append((board, move))
+
+    def close(self):
+        pass
+
+
+def test_arrow_is_not_flashed_while_the_move_panel_is_hidden():
+    from types import SimpleNamespace
+
+    engine = FakeEngine()
+    root, window = create_window_or_skip(engine)
+    try:
+        overlay = FakeOverlay()
+        overlay.visible = False
+        window.overlay = overlay
+        window.arrow_overlay = FakeArrowOverlay()
+        analysis = engine.analyse("startpos", depth=10, time_ms=None, multipv=2)
+        board = SimpleNamespace(orientation="white_bottom")
+        position = SimpleNamespace(side_to_move="white")
+
+        window._apply_pipeline_event(
+            PipelineEvent("ANALYSIS_READY", "Analysis complete", board=board, analysis=analysis, position=position)
+        )
+
+        assert window.arrow_overlay.flashes == []
+    finally:
+        window.close()
+
+
+def test_hiding_the_move_panel_also_hides_the_arrow_overlay():
+    engine = FakeEngine()
+    root, window = create_window_or_skip(engine)
+    try:
+        window._ensure_overlay()
+        window._ensure_arrow_overlay()
+        window.arrow_overlay.show()
+        assert window.arrow_overlay.visible is True
+
+        window.overlay.hide()
+
+        assert window.arrow_overlay.visible is False
+    finally:
+        window.close()
