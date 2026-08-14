@@ -45,7 +45,8 @@ class MainWindow:
 		self.root.protocol("WM_DELETE_WINDOW", self.close)
 		self.status_var = tk.StringVar(value="Ready")
 		self._build_widgets()
-		self.window_hotkey_service = GlobalHotkeyService(key="f7")
+		self._position_bottom_left()
+		self.window_hotkey_service = GlobalHotkeyService(key="f9")
 		status = self.window_hotkey_service.start(self._toggle_window_visibility_threadsafe)
 		if not status.registered:
 			self.status_var.set(status.message)
@@ -80,7 +81,14 @@ class MainWindow:
 			self.root.withdraw()
 		else:
 			self.root.deiconify()
+			self._position_bottom_left()
 		self._window_visible = not self._window_visible
+
+	def _position_bottom_left(self) -> None:
+		self.root.update_idletasks()
+		height = self.root.winfo_height()
+		screen_height = self.root.winfo_screenheight()
+		self.root.geometry(f"+10+{max(0, screen_height - height - 60)}")
 
 	def _create_pipeline(self) -> AutomaticAnalysisPipeline:
 		from chess_analyser.capture import ScreenCapture
@@ -189,7 +197,12 @@ class MainWindow:
 	def _apply_pipeline_event(self, event: PipelineEvent) -> None:
 		if event.state == "ANALYSIS_READY" and event.board is not None and event.analysis is not None:
 			self._ensure_overlay()
-			self.overlay.update(event.board, event.analysis.best_move, event.analysis, position=event.position)
+			user_color = "white" if event.board.orientation == "white_bottom" else "black"
+			if event.position is not None and event.position.side_to_move == user_color:
+				self.overlay.update(event.board, event.analysis.best_move, event.analysis, position=event.position)
+			else:
+				# Not the user's color to move; never suggest the opponent's move.
+				self.overlay.set_status("Waiting for opponent's move...")
 		# The panel's visibility is only ever controlled by the user's F8
 		# hotkey; no pipeline state here shows or hides it.
 		self.status_var.set(event.message or event.state)

@@ -109,3 +109,52 @@ def test_close_stops_engine_when_no_pipeline():
     root, window = create_window_or_skip(engine)
     window.close()
     assert engine.stopped
+
+
+class FakeOverlay:
+    def __init__(self):
+        self.updates = []
+        self.statuses = []
+
+    def show(self):
+        pass
+
+    def start_hotkey(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(registered=True, key="f8", message="")
+
+    def update(self, board, best_move, analysis, *, position=None):
+        self.updates.append((board, best_move, analysis, position))
+
+    def set_status(self, message):
+        self.statuses.append(message)
+
+    def close(self):
+        pass
+
+
+def test_move_is_only_shown_on_the_users_own_turn():
+    from types import SimpleNamespace
+
+    engine = FakeEngine()
+    root, window = create_window_or_skip(engine)
+    try:
+        window.overlay = FakeOverlay()
+        analysis = engine.analyse("startpos", depth=10, time_ms=None, multipv=2)
+        board = SimpleNamespace(orientation="white_bottom")
+
+        own_turn_position = SimpleNamespace(side_to_move="white")
+        window._apply_pipeline_event(
+            PipelineEvent("ANALYSIS_READY", "Analysis complete", board=board, analysis=analysis, position=own_turn_position)
+        )
+        assert len(window.overlay.updates) == 1
+
+        opponent_turn_position = SimpleNamespace(side_to_move="black")
+        window._apply_pipeline_event(
+            PipelineEvent("ANALYSIS_READY", "Analysis complete", board=board, analysis=analysis, position=opponent_turn_position)
+        )
+        assert len(window.overlay.updates) == 1
+        assert window.overlay.statuses == ["Waiting for opponent's move..."]
+    finally:
+        window.close()
