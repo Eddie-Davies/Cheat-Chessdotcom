@@ -34,6 +34,19 @@ ANALYSING = "ANALYSING"
 ANALYSIS_READY = "ANALYSIS_READY"
 ERROR = "ERROR"
 
+# White always moves first, so a detected starting arrangement resolves the
+# side to move by chess rules rather than a site-specific UI heuristic.
+_STANDARD_STARTING_PLACEMENT = {
+	"a1": "white_rook", "b1": "white_knight", "c1": "white_bishop", "d1": "white_queen",
+	"e1": "white_king", "f1": "white_bishop", "g1": "white_knight", "h1": "white_rook",
+	"a2": "white_pawn", "b2": "white_pawn", "c2": "white_pawn", "d2": "white_pawn",
+	"e2": "white_pawn", "f2": "white_pawn", "g2": "white_pawn", "h2": "white_pawn",
+	"a7": "black_pawn", "b7": "black_pawn", "c7": "black_pawn", "d7": "black_pawn",
+	"e7": "black_pawn", "f7": "black_pawn", "g7": "black_pawn", "h7": "black_pawn",
+	"a8": "black_rook", "b8": "black_knight", "c8": "black_bishop", "d8": "black_queen",
+	"e8": "black_king", "f8": "black_bishop", "g8": "black_knight", "h8": "black_rook",
+}
+
 
 @dataclass(frozen=True)
 class PipelineEvent:
@@ -110,6 +123,9 @@ class AutomaticAnalysisPipeline:
 		self._cached_orientation: Any | None = None
 		self._manual_board: BoardDetection | None = None
 		self._manual_orientation: str | None = None
+		self._last_committed_placement: dict[str, str] | None = None
+		self._last_committed_side: str | None = None
+		self._last_seen_placement: dict[str, str] | None = None
 
 	def start(self) -> None:
 		"""Start continuous capture and analysis on a background thread."""
@@ -131,6 +147,9 @@ class AutomaticAnalysisPipeline:
 		self._cached_board = None
 		self._last_board_detection_at = 0.0
 		self._cached_orientation = None
+		self._last_committed_placement = None
+		self._last_committed_side = None
+		self._last_seen_placement = None
 
 	def set_manual_calibration(self, *, x: int, y: int, width: int, height: int, orientation: str) -> None:
 		"""Pin board bounds and orientation from user-verified calibration, bypassing detection."""
@@ -140,11 +159,33 @@ class AutomaticAnalysisPipeline:
 		self._manual_orientation = orientation
 		self._cached_board = None
 		self._cached_orientation = None
+		self._last_committed_placement = None
+		self._last_committed_side = None
 
 	def clear_manual_calibration(self) -> None:
 		"""Return to automatic board and orientation detection."""
 		self._manual_board = None
 		self._manual_orientation = None
+		self._last_committed_placement = None
+		self._last_committed_side = None
+
+	def confirm_current_side_to_move(self, side: str) -> bool:
+		"""Manually seed whose turn it is right now, e.g. via a user hotkey.
+
+		This is a documented fallback (see AGENTS.md 3.5) for games with no
+		visible clock/turn indicator at all (correspondence games) where the
+		automatic starting-position/alternation inference has no reference point
+		to bootstrap from. After this call, subsequent confirmed position changes
+		continue to alternate automatically; no further manual input is needed.
+		Returns False if no piece placement has been recognised yet.
+		"""
+		if side not in {"white", "black"}:
+			raise ValueError("side must be 'white' or 'black'")
+		if self._last_seen_placement is None:
+			return False
+		self._last_committed_placement = self._last_seen_placement
+		self._last_committed_side = side
+		return True
 
 	def process_frame(self, screen_image: Any) -> PipelineEvent:
 		"""Process one captured screen image, intended for workers and integration tests."""
@@ -200,8 +241,22 @@ class AutomaticAnalysisPipeline:
 				)
 			clock = self.clock_detector.detect(screen_image, board)
 			player_bottom = "white" if orientation.orientation == "white_bottom" else "black"
-			active_player = player_bottom if clock.side == "bottom" else "black" if player_bottom == "white" else "white" if clock.side == "top" else None
-			side = self._detect_side_to_move(active_player=active_player, clock_side=clock.side)
+			if clock.side == "bottom":
+				active_player = player_bottom
+			elif clock.side == "top":
+				active_player = "black" if player_bottom == "white" else "white"
+			else:
+				# clock.side == "unknown": no reliable clock signal at all, so
+				# this must not masquerade as a confident active-player vote.
+				active_player = None
+			placement = {name: result.piece for name, result in pieces.items()}
+			self._last_seen_placement = placement
+			inferred_side = self._infer_side_from_history(placement)
+			side = self._detect_side_to_move(
+				active_player=active_player,
+				clock_side=clock.side,
+				confirmed_history=[inferred_side] if inferred_side else None,
+			)
 			if not side.analysis_ready:
 				return self._emit(PipelineEvent(POSITION_UNCERTAIN, "Side to move is unknown", board=board))
 			position = self.position_reconstructor.reconstruct(
@@ -212,6 +267,10 @@ class AutomaticAnalysisPipeline:
 			stability = self.position_tracker.update(position)
 			if not stability.stable:
 				return self._emit(PipelineEvent(POSITION_UNCERTAIN, "Waiting for stable position", board=board, position=position, stability=stability))
+			# Remember this confirmed placement/side so the next stable change
+			# can be resolved by alternation even without a clock/UI signal.
+			self._last_committed_placement = placement
+			self._last_committed_side = side.side_to_move
 			if not stability.should_analyse and stability.position_hash in self._analysis_cache:
 				return self._emit(PipelineEvent(ANALYSIS_READY, "Cached analysis", board=board, position=position, stability=stability, analysis=self._analysis_cache[stability.position_hash]))
 			self._set_state(POSITION_STABLE)
@@ -290,6 +349,9 @@ class AutomaticAnalysisPipeline:
 		elif board is None:
 			self._cached_board = None
 			self._cached_orientation = None
+			self._last_committed_placement = None
+			self._last_committed_side = None
+			self._last_seen_placement = None
 		else:
 			# A fresh detection below threshold invalidates any orientation cached
 			# for the previous board so it is not reused against different geometry.
@@ -307,12 +369,29 @@ class AutomaticAnalysisPipeline:
 		clearly_stronger = board.confidence >= cached.confidence + 0.1
 		return drastic_change and not clearly_stronger
 
-	def _detect_side_to_move(self, *, active_player: str | None, clock_side: str) -> Any:
+	def _detect_side_to_move(self, *, active_player: str | None, clock_side: str, confirmed_history: list[str] | None = None) -> Any:
 		active_clock = active_player if clock_side in {"top", "bottom"} else None
 		try:
-			return self.side_to_move_detector.detect(active_player=active_player, active_clock=active_clock)
+			return self.side_to_move_detector.detect(
+				active_player=active_player,
+				active_clock=active_clock,
+				confirmed_history=confirmed_history,
+			)
 		except TypeError:
 			return self.side_to_move_detector.detect()
+
+	def _infer_side_from_history(self, placement: dict[str, str]) -> str | None:
+		"""Infer whose turn it is without a clock/UI signal (e.g. correspondence
+		games with no running clock): the starting position is always White's
+		turn by chess rules, and turns alternate on every confirmed change after
+		that, so no site-specific heuristic is required."""
+		if placement == _STANDARD_STARTING_PLACEMENT:
+			return "white"
+		if placement == self._last_committed_placement:
+			return self._last_committed_side
+		if self._last_committed_side is not None:
+			return "black" if self._last_committed_side == "white" else "white"
+		return None
 
 	def _run(self) -> None:
 		while not self._stop_event.is_set():

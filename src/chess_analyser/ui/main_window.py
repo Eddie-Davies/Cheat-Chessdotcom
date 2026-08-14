@@ -43,6 +43,7 @@ class MainWindow:
 		self.overlay = overlay
 		self.arrow_overlay: Any | None = None
 		self._last_flashed_move: str | None = None
+		self._last_board: Any | None = None
 		self.calibration: BoardCalibration | None = None
 		self._running = False
 		self._closed = False
@@ -60,6 +61,12 @@ class MainWindow:
 		status = self.window_hotkey_service.start(self._toggle_window_visibility_threadsafe)
 		if not status.registered:
 			self.status_var.set(status.message)
+		# Fallback for games with no visible clock/turn indicator at all (e.g.
+		# correspondence games); see AGENTS.md 3.5 and confirm_current_side_to_move.
+		self.confirm_turn_hotkey_service = GlobalHotkeyService(key="f11")
+		confirm_status = self.confirm_turn_hotkey_service.start(self._confirm_my_turn_threadsafe)
+		if not confirm_status.registered:
+			self.status_var.set(confirm_status.message)
 
 	def _build_widgets(self) -> None:
 		container = ttk.Frame(self.root, padding=16)
@@ -243,6 +250,8 @@ class MainWindow:
 		self.root.after(0, lambda: self._apply_pipeline_event(event))
 
 	def _apply_pipeline_event(self, event: PipelineEvent) -> None:
+		if event.board is not None:
+			self._last_board = event.board
 		if event.state == "ANALYSIS_READY" and event.board is not None and event.analysis is not None:
 			self._ensure_overlay()
 			user_color = "white" if event.board.orientation == "white_bottom" else "black"
@@ -256,6 +265,21 @@ class MainWindow:
 		# The panel's visibility is only ever controlled by the user's F8
 		# hotkey; no pipeline state here shows or hides it.
 		self.status_var.set(event.message or event.state)
+
+	def _confirm_my_turn_threadsafe(self) -> None:
+		"""Called from the hotkey listener thread; marshal onto the Tk thread."""
+		self.root.after(0, self._confirm_my_turn)
+
+	def _confirm_my_turn(self) -> None:
+		"""Manually seed side-to-move for games with no visible clock at all
+		(e.g. correspondence games); press this hotkey when it's your turn."""
+		if self.pipeline is None or self._last_board is None:
+			return
+		user_color = "white" if self._last_board.orientation == "white_bottom" else "black"
+		if self.pipeline.confirm_current_side_to_move(user_color):
+			self.status_var.set("Confirmed: it's your turn now")
+		else:
+			self.status_var.set("Board not recognised yet; try again shortly")
 
 	def _flash_move_on_board(self, board: Any, best_move: str | None) -> None:
 		"""Briefly draw the suggested move on the real board so the user can
@@ -284,6 +308,7 @@ class MainWindow:
 			return
 		self._closed = True
 		self.window_hotkey_service.stop()
+		self.confirm_turn_hotkey_service.stop()
 		if self.pipeline:
 			self.pipeline.stop()
 		else:

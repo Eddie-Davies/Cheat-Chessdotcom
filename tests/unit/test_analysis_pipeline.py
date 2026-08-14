@@ -365,3 +365,115 @@ def test_clear_manual_calibration_restores_automatic_detection():
 
 	assert pipeline._manual_board is None
 	assert pipeline._manual_orientation is None
+
+
+class _FixedPositionOccupancy:
+	def __init__(self, pieces):
+		self.pieces = pieces
+
+	def detect(self, _image, squares):
+		return {
+			name: OccupancyDetection(name, "occupied", 0.95, 0.5, 0.3)
+			if name in self.pieces
+			else OccupancyDetection(name, "empty", 0.95, 0.0, 0.0)
+			for name in squares
+		}
+
+
+class _FixedPositionPieces:
+	def __init__(self, pieces):
+		self.pieces = pieces
+
+	def detect(self, _image, _squares, _occupancy):
+		from chess_analyser.detection import PieceDetection
+
+		return {name: PieceDetection(name, piece, 0.95) for name, piece in self.pieces.items()}
+
+
+class _UnknownClockDetector:
+	"""Simulates a game with no visible clock at all (e.g. correspondence)."""
+
+	def detect(self, _image, _board):
+		from chess_analyser.detection import ClockSignal
+
+		return ClockSignal("unknown", 0.0, 0.0)
+
+
+def _make_position_pipeline(pieces, *, stability_frames=1):
+	class FixedBoardDetector:
+		def detect(self, _image):
+			return _board_detection()
+
+	return AutomaticAnalysisPipeline(
+		capture=FakeCapture(None),
+		board_detector=FixedBoardDetector(),
+		orientation_detector=FakeOrientationDetector(),
+		occupancy_detector=_FixedPositionOccupancy(pieces),
+		piece_detector=_FixedPositionPieces(pieces),
+		clock_detector=_UnknownClockDetector(),
+		position_tracker=PositionTracker(stability_frames=stability_frames),
+		engine=FakeEngine(),
+	)
+
+
+def test_starting_position_infers_white_to_move_without_any_clock_signal():
+	from chess_analyser.pipeline.analyser import _STANDARD_STARTING_PLACEMENT
+
+	pipeline = _make_position_pipeline(_STANDARD_STARTING_PLACEMENT)
+
+	event = pipeline.process_frame(None)
+
+	assert event.state == ANALYSIS_READY
+	assert event.position.side_to_move == "white"
+
+
+def test_side_to_move_alternates_after_confirmed_change_without_clock():
+	from chess_analyser.pipeline.analyser import _STANDARD_STARTING_PLACEMENT
+
+	starting = dict(_STANDARD_STARTING_PLACEMENT)
+	pipeline = _make_position_pipeline(starting)
+	first = pipeline.process_frame(None)
+	assert first.position.side_to_move == "white"
+
+	after_e4 = dict(starting)
+	del after_e4["e2"]
+	after_e4["e4"] = "white_pawn"
+	pipeline.occupancy_detector = _FixedPositionOccupancy(after_e4)
+	pipeline.piece_detector = _FixedPositionPieces(after_e4)
+
+	second = pipeline.process_frame(None)
+
+	assert second.state == ANALYSIS_READY
+	assert second.position.side_to_move == "black"
+
+
+def test_confirm_current_side_to_move_bootstraps_a_clockless_midgame_position():
+	from chess_analyser.pipeline.analyser import _STANDARD_STARTING_PLACEMENT
+
+	midgame = dict(_STANDARD_STARTING_PLACEMENT)
+	del midgame["e2"]
+	midgame["e4"] = "white_pawn"
+	pipeline = _make_position_pipeline(midgame)
+
+	uncertain = pipeline.process_frame(None)
+	assert uncertain.state == POSITION_UNCERTAIN
+	assert "Side to move" in uncertain.message
+
+	assert pipeline.confirm_current_side_to_move("black") is True
+
+	resolved = pipeline.process_frame(None)
+	assert resolved.state == ANALYSIS_READY
+	assert resolved.position.side_to_move == "black"
+
+
+def test_confirm_current_side_to_move_returns_false_before_any_frame_processed():
+	pipeline = AutomaticAnalysisPipeline(capture=FakeCapture(None), board_detector=None, engine=FakeEngine())
+
+	assert pipeline.confirm_current_side_to_move("white") is False
+
+
+def test_confirm_current_side_to_move_rejects_invalid_side():
+	pipeline = AutomaticAnalysisPipeline(capture=FakeCapture(None), board_detector=None, engine=FakeEngine())
+
+	with pytest.raises(ValueError):
+		pipeline.confirm_current_side_to_move("purple")
